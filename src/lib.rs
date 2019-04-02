@@ -1,6 +1,7 @@
 pub mod camera;
 mod material;
 mod object;
+mod perlin;
 pub mod ray;
 pub mod texture;
 pub mod vec3;
@@ -44,10 +45,7 @@ pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
         center: Vec3(0., -1000., 0.),
         radius: 1000.,
         material: Material::Lambertian {
-            albedo: texture::checker(
-                texture::constant(Vec3::from(0.9)),
-                texture::constant(Vec3(0.2, 0.3, 0.1)),
-            ),
+            albedo: texture::perlin(4.),
         },
         motion: Vec3::default(),
     }];
@@ -104,8 +102,9 @@ pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
     world.push(Object::Sphere {
         center: Vec3(-4., 1., 0.),
         radius: 1.0,
-        material: Material::Lambertian {
-            albedo: texture::constant(Vec3(0.4, 0.2, 0.1)),
+        material: Material::Metal {
+            albedo: Vec3(0.7, 0.6, 0.5),
+            fuzz: 0.,
         },
         motion: Vec3::default(),
     });
@@ -113,9 +112,8 @@ pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
     world.push(Object::Sphere {
         center: Vec3(4., 1., 0.),
         radius: 1.0,
-        material: Material::Metal {
-            albedo: Vec3(0.7, 0.6, 0.5),
-            fuzz: 0.,
+        material: Material::Lambertian {
+            albedo: texture::perlin(10.),
         },
         motion: Vec3::default(),
     });
@@ -152,9 +150,13 @@ pub fn print_ppm(image: Image) {
         for col in scanline {
             let col = Vec3(col.0.sqrt(), col.1.sqrt(), col.2.sqrt());
 
-            let ir = (255.99 * col[R]) as i32;
-            let ig = (255.99 * col[G]) as i32;
-            let ib = (255.99 * col[B]) as i32;
+            fn to_u8(x: f32) -> i32 {
+                ((255.99 * x) as i32).max(0).min(255)
+            }
+
+            let ir = to_u8(col[R]);
+            let ig = to_u8(col[G]);
+            let ib = to_u8(col[B]);
 
             println!("{} {} {}", ir, ig, ib);
         }
