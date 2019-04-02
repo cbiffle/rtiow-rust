@@ -45,6 +45,7 @@ pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
         material: Material::Lambertian {
             albedo: Vec3::from(0.5),
         },
+        motion: Vec3::default(),
     }];
 
     for a in -11..11 {
@@ -64,6 +65,7 @@ pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
                         material: Material::Lambertian {
                             albedo: rng.gen::<Vec3>() * rng.gen::<Vec3>(),
                         },
+                        motion: Vec3(0., rng.gen_range(0., 0.5), 0.),
                     }
                 } else if choose_mat < 0.95 {
                     Object::Sphere {
@@ -73,12 +75,14 @@ pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
                             albedo: 0.5 * (1. + rng.gen::<Vec3>()),
                             fuzz: 0.5 * rng.gen::<f32>(),
                         },
+                        motion: Vec3::default(),
                     }
                 } else {
                     Object::Sphere {
                         center,
                         radius: 0.2,
                         material: Material::Dielectric { ref_idx: 1.5 },
+                        motion: Vec3::default(),
                     }
                 };
                 world.push(obj);
@@ -90,6 +94,7 @@ pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
         center: Vec3(0., 1., 0.),
         radius: 1.0,
         material: Material::Dielectric { ref_idx: 1.5 },
+        motion: Vec3::default(),
     });
 
     world.push(Object::Sphere {
@@ -98,6 +103,7 @@ pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
         material: Material::Lambertian {
             albedo: Vec3(0.4, 0.2, 0.1),
         },
+        motion: Vec3::default(),
     });
 
     world.push(Object::Sphere {
@@ -107,6 +113,7 @@ pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
             albedo: Vec3(0.7, 0.6, 0.5),
             fuzz: 0.,
         },
+        motion: Vec3::default(),
     });
 
     world

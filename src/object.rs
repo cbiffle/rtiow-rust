@@ -16,6 +16,8 @@ pub enum Object {
         radius: f32,
         /// Material of the sphere.
         material: Material,
+        /// Motion vector displacing sphere from `center` over time.
+        motion: Vec3,
     },
 }
 
@@ -43,9 +45,12 @@ impl Object {
             center,
             radius,
             material,
+            motion,
         } = self;
 
-        let oc = ray.origin - *center;
+        let center = ray.time * *motion + *center;
+
+        let oc = ray.origin - center;
         let a = ray.direction.dot(ray.direction);
         let b = oc.dot(ray.direction);
         let c = oc.dot(oc) - radius * radius;

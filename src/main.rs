@@ -26,6 +26,7 @@ fn main() {
         NX as f32 / NY as f32,
         aperture,
         dist_to_focus,
+        0. ..1.,
     );
 
     eprintln!("World contains {} objects.", world.len());

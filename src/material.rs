@@ -59,6 +59,7 @@ impl Material {
                 let scattered = Ray {
                     origin: hit.p,
                     direction: target - hit.p,
+                    time: ray.time,
                 };
                 Some((scattered, *albedo))
             }
@@ -67,6 +68,7 @@ impl Material {
                     origin: hit.p,
                     direction: reflect(ray.direction.into_unit(), hit.normal)
                         + *fuzz * Vec3::in_unit_sphere(rng),
+                    time: ray.time,
                 };
                 if scattered.direction.dot(hit.normal) > 0. {
                     Some((scattered, *albedo))
@@ -97,6 +99,7 @@ impl Material {
                 let ray = Ray {
                     origin: hit.p,
                     direction,
+                    time: ray.time,
                 };
                 Some((ray, attenuation))
             }
