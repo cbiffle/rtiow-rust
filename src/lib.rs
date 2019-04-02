@@ -2,6 +2,7 @@ pub mod camera;
 mod material;
 mod object;
 pub mod ray;
+pub mod texture;
 pub mod vec3;
 
 use rand::prelude::*;
@@ -43,7 +44,10 @@ pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
         center: Vec3(0., -1000., 0.),
         radius: 1000.,
         material: Material::Lambertian {
-            albedo: Vec3::from(0.5),
+            albedo: texture::checker(
+                texture::constant(Vec3::from(0.9)),
+                texture::constant(Vec3(0.2, 0.3, 0.1)),
+            ),
         },
         motion: Vec3::default(),
     }];
@@ -63,7 +67,7 @@ pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
                         center,
                         radius: 0.2,
                         material: Material::Lambertian {
-                            albedo: rng.gen::<Vec3>() * rng.gen::<Vec3>(),
+                            albedo: texture::constant(rng.gen::<Vec3>() * rng.gen::<Vec3>()),
                         },
                         motion: Vec3(0., rng.gen_range(0., 0.5), 0.),
                     }
@@ -101,7 +105,7 @@ pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
         center: Vec3(-4., 1., 0.),
         radius: 1.0,
         material: Material::Lambertian {
-            albedo: Vec3(0.4, 0.2, 0.1),
+            albedo: texture::constant(Vec3(0.4, 0.2, 0.1)),
         },
         motion: Vec3::default(),
     });

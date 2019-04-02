@@ -6,7 +6,6 @@ use crate::vec3::Vec3;
 ///
 /// The primary purpose of an `Object` is to interact with rays of light using
 /// the `hit` method.
-#[derive(Clone, Debug)]
 pub enum Object {
     /// A sphere.
     Sphere {
@@ -84,7 +83,7 @@ impl Object {
 
 /// Initial cheap ray-object intersection record, used before we've decided
 /// which object was actually hit.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct HitRecord1<'a> {
     /// Position along the ray, expressed in distance from the origin.
     t: f32,
@@ -111,7 +110,7 @@ impl<'o> HitRecord1<'o> {
 ///
 /// The `'m` lifetime refers to the `Material` of the `Object`, which we capture
 /// by reference. Thus, a `HitRecord` cannot outlive the `Object` it refers to.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct HitRecord<'m> {
     /// Position along the ray, expressed in distance from the origin.
     pub t: f32,

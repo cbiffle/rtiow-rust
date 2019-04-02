@@ -2,21 +2,16 @@ use rand::prelude::*;
 
 use crate::object::HitRecord;
 use crate::ray::Ray;
+use crate::texture::Texture;
 use crate::vec3::{reflect, refract, Vec3};
 
 /// Material options for a rendered object.
-#[derive(Clone, Debug)]
 pub enum Material {
     /// An opaque material with a matte surface, where lighting is calculated
     /// using [Lambertian reflectance][lambert].
     ///
     /// [lambert]: https://en.wikipedia.org/wiki/Lambertian_reflectance
-    Lambertian {
-        /// The amount of light energy reflected in each color component, so
-        /// `Vec3(1., 1., 1.)` is a white surface, and `Vec3(0., 0., 0.)` is
-        /// totally black.
-        albedo: Vec3,
-    },
+    Lambertian { albedo: Texture },
     /// A reflective material that looks like polished or frosted metal.
     Metal {
         /// The amount of light energy reflected in each color component, so
@@ -61,7 +56,7 @@ impl Material {
                     direction: target - hit.p,
                     time: ray.time,
                 };
-                Some((scattered, *albedo))
+                Some((scattered, albedo(hit.p)))
             }
             Material::Metal { albedo, fuzz } => {
                 let scattered = Ray {
@@ -109,7 +104,7 @@ impl Material {
 
 /// [Schlick's approximation][schlick] for computing reflection vs. refraction
 /// at a material surface.
-/// 
+///
 /// [schlick]: https://en.wikipedia.org/wiki/Schlick%27s_approximation
 fn schlick(cos: f32, ref_idx: f32) -> f32 {
     let r0 = (1. - ref_idx) / (1. + ref_idx);
