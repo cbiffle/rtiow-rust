@@ -31,6 +31,8 @@ pub enum Material {
         /// [ref-idx]: https://en.wikipedia.org/wiki/Refractive_index
         ref_idx: f32,
     },
+    /// Diffuse light.
+    DiffuseLight { emission: Texture, brightness: f32 },
 }
 
 impl Material {
@@ -98,6 +100,17 @@ impl Material {
                 };
                 Some((ray, attenuation))
             }
+            Material::DiffuseLight { .. } => None,
+        }
+    }
+
+    pub fn emitted(&self, p: Vec3) -> Vec3 {
+        match self {
+            Material::DiffuseLight {
+                emission,
+                brightness,
+            } => *brightness * emission(p),
+            _ => Vec3::default(),
         }
     }
 }

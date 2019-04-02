@@ -20,15 +20,19 @@ use crate::vec3::{Axis::*, Channel::*, *};
 /// This is the actual ray-tracing routine.
 pub fn color(world: &[Object], mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
     let mut strength = Vec3::from(1.);
+    let mut emitted = Vec3::default();
     let mut bounces = 0;
 
     while let Some(hit) = hit_slice(world, &ray) {
         if bounces < 50 {
             if let Some((new_ray, attenuation)) = hit.material.scatter(&ray, &hit, rng) {
                 ray = new_ray;
+                emitted = emitted + strength * hit.material.emitted(hit.p);
                 strength = strength * attenuation;
                 bounces += 1;
                 continue;
+            } else {
+                return emitted + strength * hit.material.emitted(hit.p);
             }
         }
         return Vec3::default();
@@ -112,8 +116,9 @@ pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
     world.push(Object::Sphere {
         center: Vec3(4., 1., 0.),
         radius: 1.0,
-        material: Material::Lambertian {
-            albedo: texture::perlin(10.),
+        material: Material::DiffuseLight {
+            emission: texture::perlin(10.),
+            brightness: 4.,
         },
         motion: Vec3::default(),
     });
