@@ -1,0 +1,7 @@
+[package]
+name = "rtiow"
+version = "0.1.0"
+authors = ["cbiffle <cbiffle@x.team>"]
+edition = "2018"
+
+[dependencies]
