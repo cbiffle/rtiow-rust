@@ -1,6 +1,5 @@
 use rand::prelude::*;
 use rayon::prelude::*;
-use std::sync::Arc;
 
 #[derive(Copy, Clone, Default, Debug)]
 struct Vec3(f32, f32, f32);
@@ -198,7 +197,7 @@ enum Object {
     Sphere {
         center: Vec3,
         radius: f32,
-        material: Arc<Material>,
+        material: Material,
     },
 }
 
@@ -418,9 +417,9 @@ fn random_scene() -> Vec<Object> {
     let mut world = vec![Object::Sphere {
         center: Vec3(0., -1000., 0.),
         radius: 1000.,
-        material: Arc::new(Material::Lambertian {
+        material: Material::Lambertian {
             albedo: Vec3::from(0.5),
-        }),
+        },
     }];
 
     let mut rng = rand::thread_rng();
@@ -439,24 +438,24 @@ fn random_scene() -> Vec<Object> {
                     Object::Sphere {
                         center,
                         radius: 0.2,
-                        material: Arc::new(Material::Lambertian {
+                        material: Material::Lambertian {
                             albedo: rng.gen::<Vec3>() * rng.gen::<Vec3>(),
-                        }),
+                        },
                     }
                 } else if choose_mat < 0.95 {
                     Object::Sphere {
                         center,
                         radius: 0.2,
-                        material: Arc::new(Material::Metal {
+                        material: Material::Metal {
                             albedo: 0.5 * (1. + rng.gen::<Vec3>()),
                             fuzz: 0.5 * rng.gen::<f32>(),
-                        }),
+                        },
                     }
                 } else {
                     Object::Sphere {
                         center,
                         radius: 0.2,
-                        material: Arc::new(Material::Dielectric { ref_idx: 1.5 }),
+                        material: Material::Dielectric { ref_idx: 1.5 },
                     }
                 };
                 world.push(obj);
@@ -467,24 +466,24 @@ fn random_scene() -> Vec<Object> {
     world.push(Object::Sphere {
         center: Vec3(0., 1., 0.),
         radius: 1.0,
-        material: Arc::new(Material::Dielectric { ref_idx: 1.5 }),
+        material: Material::Dielectric { ref_idx: 1.5 },
     });
 
     world.push(Object::Sphere {
         center: Vec3(-4., 1., 0.),
         radius: 1.0,
-        material: Arc::new(Material::Lambertian {
+        material: Material::Lambertian {
             albedo: Vec3(0.4, 0.2, 0.1),
-        }),
+        },
     });
 
     world.push(Object::Sphere {
         center: Vec3(4., 1., 0.),
         radius: 1.0,
-        material: Arc::new(Material::Metal {
+        material: Material::Metal {
             albedo: Vec3(0.7, 0.6, 0.5),
             fuzz: 0.,
-        }),
+        },
     });
 
     world
