@@ -1,5 +1,5 @@
 use rand::prelude::*;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Copy, Clone, Default, Debug)]
 struct Vec3(f32, f32, f32);
@@ -157,10 +157,10 @@ pub struct HitRecord {
     t: f32,
     p: Vec3,
     normal: Vec3,
-    material: Rc<dyn Material>,
+    material: Arc<dyn Material>,
 }
 
-trait Object {
+trait Object: Sync + Send {
     fn hit(&self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord>;
 }
 
@@ -168,7 +168,7 @@ trait Object {
 pub struct Sphere {
     center: Vec3,
     radius: f32,
-    material: Rc<dyn Material>,
+    material: Arc<dyn Material>,
 }
 
 impl Object for Sphere {
@@ -189,7 +189,7 @@ impl Object for Sphere {
                         t,
                         p,
                         normal: (p - self.center) / self.radius,
-                        material: Rc::clone(&self.material),
+                        material: Arc::clone(&self.material),
                     });
                 }
             }
@@ -200,7 +200,7 @@ impl Object for Sphere {
 
 impl<T> Object for [T]
 where
-    T: std::ops::Deref<Target = dyn Object>,
+    T: std::ops::Deref<Target = dyn Object> + Send + Sync,
 {
     fn hit(&self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord> {
         self.iter().fold(None, |hit, obj| {
@@ -316,7 +316,7 @@ fn in_unit_disc() -> Vec3 {
     }
 }
 
-trait Material: std::fmt::Debug {
+trait Material: std::fmt::Debug + Sync + Send {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Vec3)>;
 }
 
@@ -401,7 +401,7 @@ fn random_scene() -> Vec<Box<dyn Object>> {
     let mut world: Vec<Box<dyn Object>> = vec![Box::new(Sphere {
         center: Vec3(0., -1000., 0.),
         radius: 1000.,
-        material: Rc::new(Lambertian {
+        material: Arc::new(Lambertian {
             albedo: Vec3(0.5, 0.5, 0.5),
         }),
     })];
@@ -422,7 +422,7 @@ fn random_scene() -> Vec<Box<dyn Object>> {
                     Box::new(Sphere {
                         center,
                         radius: 0.2,
-                        material: Rc::new(Lambertian {
+                        material: Arc::new(Lambertian {
                             albedo: Vec3(
                                 rng.gen::<f32>() * rng.gen::<f32>(),
                                 rng.gen::<f32>() * rng.gen::<f32>(),
@@ -434,7 +434,7 @@ fn random_scene() -> Vec<Box<dyn Object>> {
                     Box::new(Sphere {
                         center,
                         radius: 0.2,
-                        material: Rc::new(Metal {
+                        material: Arc::new(Metal {
                             albedo: Vec3(
                                 0.5 * (1. + rng.gen::<f32>()),
                                 0.5 * (1. + rng.gen::<f32>()),
@@ -447,7 +447,7 @@ fn random_scene() -> Vec<Box<dyn Object>> {
                     Box::new(Sphere {
                         center,
                         radius: 0.2,
-                        material: Rc::new(Dielectric { ref_idx: 1.5 }),
+                        material: Arc::new(Dielectric { ref_idx: 1.5 }),
                     })
                 };
                 world.push(obj);
@@ -458,13 +458,13 @@ fn random_scene() -> Vec<Box<dyn Object>> {
     world.push(Box::new(Sphere {
         center: Vec3(0., 1., 0.),
         radius: 1.0,
-        material: Rc::new(Dielectric { ref_idx: 1.5 }),
+        material: Arc::new(Dielectric { ref_idx: 1.5 }),
     }));
 
     world.push(Box::new(Sphere {
         center: Vec3(-4., 1., 0.),
         radius: 1.0,
-        material: Rc::new(Lambertian {
+        material: Arc::new(Lambertian {
             albedo: Vec3(0.4, 0.2, 0.1),
         }),
     }));
@@ -472,7 +472,7 @@ fn random_scene() -> Vec<Box<dyn Object>> {
     world.push(Box::new(Sphere {
         center: Vec3(4., 1., 0.),
         radius: 1.0,
-        material: Rc::new(Metal {
+        material: Arc::new(Metal {
             albedo: Vec3(0.7, 0.6, 0.5),
             fuzz: 0.,
         }),
