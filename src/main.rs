@@ -191,20 +191,24 @@ pub struct HitRecord {
     t: f32,
     p: Vec3,
     normal: Vec3,
-    material: Arc<dyn Material>,
+    material: Arc<Material>,
 }
 
 enum Object {
     Sphere {
         center: Vec3,
         radius: f32,
-        material: Arc<dyn Material>,
+        material: Arc<Material>,
     },
 }
 
 impl Object {
     fn hit(&self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord> {
-        let Object::Sphere { center, radius, material } = self;
+        let Object::Sphere {
+            center,
+            radius,
+            material,
+        } = self;
 
         let oc = ray.origin - *center;
         let a = ray.direction.dot(ray.direction);
@@ -340,43 +344,62 @@ fn in_unit_disc() -> Vec3 {
     }
 }
 
-trait Material: std::fmt::Debug + Sync + Send {
-    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Vec3)>;
+#[derive(Clone, Debug)]
+enum Material {
+    Lambertian { albedo: Vec3 },
+    Metal { albedo: Vec3, fuzz: f32 },
+    Dielectric { ref_idx: f32 },
 }
 
-#[derive(Debug)]
-struct Lambertian {
-    albedo: Vec3,
-}
-
-impl Material for Lambertian {
-    fn scatter(&self, _ray: &Ray, hit: &HitRecord) -> Option<(Ray, Vec3)> {
-        let target = hit.p + hit.normal + in_unit_sphere();
-        let scattered = Ray {
-            origin: hit.p,
-            direction: target - hit.p,
-        };
-        Some((scattered, self.albedo))
-    }
-}
-
-#[derive(Debug)]
-struct Metal {
-    albedo: Vec3,
-    fuzz: f32,
-}
-
-impl Material for Metal {
+impl Material {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Vec3)> {
-        let scattered = Ray {
-            origin: hit.p,
-            direction: reflect(ray.direction.into_unit(), hit.normal)
-                + self.fuzz * in_unit_sphere(),
-        };
-        if scattered.direction.dot(hit.normal) > 0. {
-            Some((scattered, self.albedo))
-        } else {
-            None
+        match self {
+            Material::Lambertian { albedo } => {
+                let target = hit.p + hit.normal + in_unit_sphere();
+                let scattered = Ray {
+                    origin: hit.p,
+                    direction: target - hit.p,
+                };
+                Some((scattered, *albedo))
+            }
+            Material::Metal { albedo, fuzz } => {
+                let scattered = Ray {
+                    origin: hit.p,
+                    direction: reflect(ray.direction.into_unit(), hit.normal)
+                        + *fuzz * in_unit_sphere(),
+                };
+                if scattered.direction.dot(hit.normal) > 0. {
+                    Some((scattered, *albedo))
+                } else {
+                    None
+                }
+            }
+            Material::Dielectric { ref_idx } => {
+                let (outward_normal, ni_over_nt, cosine) = if ray.direction.dot(hit.normal) > 0. {
+                    (
+                        -hit.normal,
+                        *ref_idx,
+                        *ref_idx * ray.direction.dot(hit.normal) / ray.direction.length(),
+                    )
+                } else {
+                    (
+                        hit.normal,
+                        1.0 / *ref_idx,
+                        -ray.direction.dot(hit.normal) / ray.direction.length(),
+                    )
+                };
+
+                let direction = refract(ray.direction, outward_normal, ni_over_nt)
+                    .filter(|_| rand::thread_rng().gen::<f32>() >= schlick(cosine, *ref_idx))
+                    .unwrap_or_else(|| reflect(ray.direction, hit.normal));
+
+                let attenuation = Vec3::from(1.);
+                let ray = Ray {
+                    origin: hit.p,
+                    direction,
+                };
+                Some((ray, attenuation))
+            }
         }
     }
 }
@@ -387,45 +410,11 @@ fn schlick(cos: f32, ref_idx: f32) -> f32 {
     r0 + (1. - r0) * f32::powf(1. - cos, 5.)
 }
 
-#[derive(Debug)]
-struct Dielectric {
-    ref_idx: f32,
-}
-
-impl Material for Dielectric {
-    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Vec3)> {
-        let (outward_normal, ni_over_nt, cosine) = if ray.direction.dot(hit.normal) > 0. {
-            (
-                -hit.normal,
-                self.ref_idx,
-                self.ref_idx * ray.direction.dot(hit.normal) / ray.direction.length(),
-            )
-        } else {
-            (
-                hit.normal,
-                1.0 / self.ref_idx,
-                -ray.direction.dot(hit.normal) / ray.direction.length(),
-            )
-        };
-
-        let direction = refract(ray.direction, outward_normal, ni_over_nt)
-            .filter(|_| rand::thread_rng().gen::<f32>() >= schlick(cosine, self.ref_idx))
-            .unwrap_or_else(|| reflect(ray.direction, hit.normal));
-
-        let attenuation = Vec3::from(1.);
-        let ray = Ray {
-            origin: hit.p,
-            direction,
-        };
-        Some((ray, attenuation))
-    }
-}
-
 fn random_scene() -> Vec<Object> {
     let mut world = vec![Object::Sphere {
         center: Vec3(0., -1000., 0.),
         radius: 1000.,
-        material: Arc::new(Lambertian {
+        material: Arc::new(Material::Lambertian {
             albedo: Vec3::from(0.5),
         }),
     }];
@@ -446,7 +435,7 @@ fn random_scene() -> Vec<Object> {
                     Object::Sphere {
                         center,
                         radius: 0.2,
-                        material: Arc::new(Lambertian {
+                        material: Arc::new(Material::Lambertian {
                             albedo: rng.gen::<Vec3>() * rng.gen::<Vec3>(),
                         }),
                     }
@@ -454,7 +443,7 @@ fn random_scene() -> Vec<Object> {
                     Object::Sphere {
                         center,
                         radius: 0.2,
-                        material: Arc::new(Metal {
+                        material: Arc::new(Material::Metal {
                             albedo: 0.5 * (1. + rng.gen::<Vec3>()),
                             fuzz: 0.5 * rng.gen::<f32>(),
                         }),
@@ -463,7 +452,7 @@ fn random_scene() -> Vec<Object> {
                     Object::Sphere {
                         center,
                         radius: 0.2,
-                        material: Arc::new(Dielectric { ref_idx: 1.5 }),
+                        material: Arc::new(Material::Dielectric { ref_idx: 1.5 }),
                     }
                 };
                 world.push(obj);
@@ -474,13 +463,13 @@ fn random_scene() -> Vec<Object> {
     world.push(Object::Sphere {
         center: Vec3(0., 1., 0.),
         radius: 1.0,
-        material: Arc::new(Dielectric { ref_idx: 1.5 }),
+        material: Arc::new(Material::Dielectric { ref_idx: 1.5 }),
     });
 
     world.push(Object::Sphere {
         center: Vec3(-4., 1., 0.),
         radius: 1.0,
-        material: Arc::new(Lambertian {
+        material: Arc::new(Material::Lambertian {
             albedo: Vec3(0.4, 0.2, 0.1),
         }),
     });
@@ -488,7 +477,7 @@ fn random_scene() -> Vec<Object> {
     world.push(Object::Sphere {
         center: Vec3(4., 1., 0.),
         radius: 1.0,
-        material: Arc::new(Metal {
+        material: Arc::new(Material::Metal {
             albedo: Vec3(0.7, 0.6, 0.5),
             fuzz: 0.,
         }),
