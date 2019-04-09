@@ -6,8 +6,9 @@ use std::sync::Arc;
 struct Vec3(f32, f32, f32);
 
 impl Vec3 {
-    pub fn dot(&self, other: &Self) -> f32 {
-        self.0 * other.0 + self.1 * other.1 + self.2 * other.2
+    pub fn dot(&self, other: Self) -> f32 {
+        self.zip_with(other, core::ops::Mul::mul)
+            .reduce(core::ops::Add::add)
     }
 
     pub fn cross(&self, other: &Self) -> Self {
@@ -19,24 +20,48 @@ impl Vec3 {
     }
 
     pub fn length(&self) -> f32 {
-        f32::sqrt(self.dot(self))
+        self.dot(*self).sqrt()
     }
 
     pub fn into_unit(self) -> Self {
         self / self.length()
     }
+
+    pub fn map(self, mut f: impl FnMut(f32) -> f32) -> Self {
+        Vec3(f(self.0), f(self.1), f(self.2))
+    }
+
+    pub fn zip_with(self, other: Vec3, mut f: impl FnMut(f32, f32) -> f32) -> Self {
+        Vec3(f(self.0, other.0), f(self.1, other.1), f(self.2, other.2))
+    }
+
+    pub fn reduce(self, f: impl Fn(f32, f32) -> f32) -> f32 {
+        f(f(self.0, self.1), self.2)
+    }
 }
 
-fn reflect(v: &Vec3, n: &Vec3) -> Vec3 {
-    *v - 2. * v.dot(n) * *n
+impl From<f32> for Vec3 {
+    fn from(v: f32) -> Self {
+        Vec3(v, v, v)
+    }
 }
 
-fn refract(v: &Vec3, n: &Vec3, ni_over_nt: f32) -> Option<Vec3> {
+impl rand::distributions::Distribution<Vec3> for rand::distributions::Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Vec3 {
+        Vec3(rng.gen(), rng.gen(), rng.gen())
+    }
+}
+
+fn reflect(v: Vec3, n: Vec3) -> Vec3 {
+    v - 2. * v.dot(n) * n
+}
+
+fn refract(v: Vec3, n: Vec3, ni_over_nt: f32) -> Option<Vec3> {
     let uv = v.into_unit();
     let dt = uv.dot(n);
     let discriminant = 1.0 - ni_over_nt * ni_over_nt * (1. - dt * dt);
     if discriminant > 0. {
-        Some(ni_over_nt * (uv - dt * *n) - discriminant.sqrt() * *n)
+        Some(ni_over_nt * (uv - dt * n) - discriminant.sqrt() * n)
     } else {
         None
     }
@@ -46,7 +71,7 @@ impl std::ops::Mul<Vec3> for f32 {
     type Output = Vec3;
 
     fn mul(self, rhs: Vec3) -> Self::Output {
-        Vec3(self * rhs.0, self * rhs.1, self * rhs.2)
+        rhs.map(|x| self * x)
     }
 }
 
@@ -54,7 +79,7 @@ impl std::ops::Mul for Vec3 {
     type Output = Vec3;
 
     fn mul(self, rhs: Vec3) -> Self::Output {
-        Vec3(self.0 * rhs.0, self.1 * rhs.1, self.2 * rhs.2)
+        self.zip_with(rhs, std::ops::Mul::mul)
     }
 }
 
@@ -62,7 +87,7 @@ impl std::ops::Div<f32> for Vec3 {
     type Output = Vec3;
 
     fn div(self, rhs: f32) -> Self::Output {
-        Vec3(self.0 / rhs, self.1 / rhs, self.2 / rhs)
+        self.map(|x| x / rhs)
     }
 }
 
@@ -70,7 +95,15 @@ impl std::ops::Add for Vec3 {
     type Output = Vec3;
 
     fn add(self, rhs: Vec3) -> Self::Output {
-        Vec3(self.0 + rhs.0, self.1 + rhs.1, self.2 + rhs.2)
+        self.zip_with(rhs, std::ops::Add::add)
+    }
+}
+
+impl std::ops::Add<Vec3> for f32 {
+    type Output = Vec3;
+
+    fn add(self, rhs: Vec3) -> Self::Output {
+        rhs.map(|x| self + x)
     }
 }
 
@@ -78,7 +111,7 @@ impl std::ops::Sub for Vec3 {
     type Output = Vec3;
 
     fn sub(self, rhs: Vec3) -> Self::Output {
-        Vec3(self.0 - rhs.0, self.1 - rhs.1, self.2 - rhs.2)
+        self.zip_with(rhs, std::ops::Sub::sub)
     }
 }
 
@@ -86,7 +119,7 @@ impl std::ops::Neg for Vec3 {
     type Output = Vec3;
 
     fn neg(self) -> Self::Output {
-        Vec3(-self.0, -self.1, -self.2)
+        self.map(std::ops::Neg::neg)
     }
 }
 
@@ -95,7 +128,7 @@ impl std::iter::Sum for Vec3 {
     where
         I: Iterator<Item = Self>,
     {
-        iter.fold(Vec3::default(), |sum, x| sum + x)
+        iter.fold(Vec3::default(), std::ops::Add::add)
     }
 }
 
@@ -175,9 +208,9 @@ pub struct Sphere {
 impl Object for Sphere {
     fn hit(&self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord> {
         let oc = ray.origin - self.center;
-        let a = ray.direction.dot(&ray.direction);
-        let b = oc.dot(&ray.direction);
-        let c = oc.dot(&oc) - self.radius * self.radius;
+        let a = ray.direction.dot(ray.direction);
+        let b = oc.dot(ray.direction);
+        let c = oc.dot(oc) - self.radius * self.radius;
         let discriminant = b * b - a * c;
         if discriminant > 0. {
             for &t in &[
@@ -217,18 +250,14 @@ where
 }
 
 fn color(world: &[Box<dyn Object>], mut ray: Ray) -> Vec3 {
-    let mut strength = Vec3(1., 1., 1.);
+    let mut strength = Vec3::from(1.);
     let mut bounces = 0;
 
     while let Some(hit) = world.hit(&ray, 0.001..std::f32::MAX) {
         if bounces < 50 {
             if let Some((new_ray, attenuation)) = hit.material.scatter(&ray, &hit) {
                 ray = new_ray;
-                strength = Vec3(
-                    strength.0 * attenuation.0,
-                    strength.1 * attenuation.1,
-                    strength.2 * attenuation.2,
-                );
+                strength = strength * attenuation;
                 bounces += 1;
                 continue;
             }
@@ -238,8 +267,8 @@ fn color(world: &[Box<dyn Object>], mut ray: Ray) -> Vec3 {
 
     let unit_direction = ray.direction.into_unit();
     let t = 0.5 * (unit_direction[Y] + 1.0);
-    let col = (1. - t) * Vec3(1., 1., 1.) + t * Vec3(0.5, 0.7, 1.0);
-    Vec3(strength.0 * col.0, strength.1 * col.1, strength.2 * col.2)
+    let col = (1. - t) * Vec3::from(1.) + t * Vec3(0.5, 0.7, 1.0);
+    strength * col
 }
 
 struct Camera {
@@ -300,8 +329,8 @@ impl Camera {
 fn in_unit_sphere() -> Vec3 {
     let mut rng = rand::thread_rng();
     loop {
-        let v = 2. * Vec3(rng.gen(), rng.gen(), rng.gen()) - Vec3(1., 1., 1.);
-        if v.dot(&v) < 1. {
+        let v = 2. * rng.gen::<Vec3>() - Vec3::from(1.);
+        if v.dot(v) < 1. {
             return v;
         }
     }
@@ -311,7 +340,7 @@ fn in_unit_disc() -> Vec3 {
     let mut rng = rand::thread_rng();
     loop {
         let v = 2. * Vec3(rng.gen(), rng.gen(), 0.) - Vec3(1., 1., 0.);
-        if v.dot(&v) < 1. {
+        if v.dot(v) < 1. {
             return v;
         }
     }
@@ -347,10 +376,10 @@ impl Material for Metal {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Vec3)> {
         let scattered = Ray {
             origin: hit.p,
-            direction: reflect(&ray.direction.into_unit(), &hit.normal)
+            direction: reflect(ray.direction.into_unit(), hit.normal)
                 + self.fuzz * in_unit_sphere(),
         };
-        if scattered.direction.dot(&hit.normal) > 0. {
+        if scattered.direction.dot(hit.normal) > 0. {
             Some((scattered, self.albedo))
         } else {
             None
@@ -371,25 +400,25 @@ struct Dielectric {
 
 impl Material for Dielectric {
     fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Vec3)> {
-        let (outward_normal, ni_over_nt, cosine) = if ray.direction.dot(&hit.normal) > 0. {
+        let (outward_normal, ni_over_nt, cosine) = if ray.direction.dot(hit.normal) > 0. {
             (
                 -hit.normal,
                 self.ref_idx,
-                self.ref_idx * ray.direction.dot(&hit.normal) / ray.direction.length(),
+                self.ref_idx * ray.direction.dot(hit.normal) / ray.direction.length(),
             )
         } else {
             (
                 hit.normal,
                 1.0 / self.ref_idx,
-                -ray.direction.dot(&hit.normal) / ray.direction.length(),
+                -ray.direction.dot(hit.normal) / ray.direction.length(),
             )
         };
 
-        let direction = refract(&ray.direction, &outward_normal, ni_over_nt)
+        let direction = refract(ray.direction, outward_normal, ni_over_nt)
             .filter(|_| rand::thread_rng().gen::<f32>() >= schlick(cosine, self.ref_idx))
-            .unwrap_or_else(|| reflect(&ray.direction, &hit.normal));
+            .unwrap_or_else(|| reflect(ray.direction, hit.normal));
 
-        let attenuation = Vec3(1.0, 1.0, 1.0);
+        let attenuation = Vec3::from(1.);
         let ray = Ray {
             origin: hit.p,
             direction,
@@ -403,7 +432,7 @@ fn random_scene() -> Vec<Box<dyn Object>> {
         center: Vec3(0., -1000., 0.),
         radius: 1000.,
         material: Arc::new(Lambertian {
-            albedo: Vec3(0.5, 0.5, 0.5),
+            albedo: Vec3::from(0.5),
         }),
     })];
 
@@ -424,11 +453,7 @@ fn random_scene() -> Vec<Box<dyn Object>> {
                         center,
                         radius: 0.2,
                         material: Arc::new(Lambertian {
-                            albedo: Vec3(
-                                rng.gen::<f32>() * rng.gen::<f32>(),
-                                rng.gen::<f32>() * rng.gen::<f32>(),
-                                rng.gen::<f32>() * rng.gen::<f32>(),
-                            ),
+                            albedo: rng.gen::<Vec3>() * rng.gen::<Vec3>(),
                         }),
                     })
                 } else if choose_mat < 0.95 {
@@ -436,11 +461,7 @@ fn random_scene() -> Vec<Box<dyn Object>> {
                         center,
                         radius: 0.2,
                         material: Arc::new(Metal {
-                            albedo: Vec3(
-                                0.5 * (1. + rng.gen::<f32>()),
-                                0.5 * (1. + rng.gen::<f32>()),
-                                0.5 * (1. + rng.gen::<f32>()),
-                            ),
+                            albedo: 0.5 * (1. + rng.gen::<Vec3>()),
                             fuzz: 0.5 * rng.gen::<f32>(),
                         }),
                     })
