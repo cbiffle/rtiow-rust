@@ -194,23 +194,22 @@ pub struct HitRecord {
     material: Arc<dyn Material>,
 }
 
-trait Object: Sync + Send {
-    fn hit(&self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord>;
+enum Object {
+    Sphere {
+        center: Vec3,
+        radius: f32,
+        material: Arc<dyn Material>,
+    },
 }
 
-#[derive(Clone, Debug)]
-pub struct Sphere {
-    center: Vec3,
-    radius: f32,
-    material: Arc<dyn Material>,
-}
-
-impl Object for Sphere {
+impl Object {
     fn hit(&self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord> {
-        let oc = ray.origin - self.center;
+        let Object::Sphere { center, radius, material } = self;
+
+        let oc = ray.origin - *center;
         let a = ray.direction.dot(ray.direction);
         let b = oc.dot(ray.direction);
-        let c = oc.dot(oc) - self.radius * self.radius;
+        let c = oc.dot(oc) - radius * radius;
         let discriminant = b * b - a * c;
         if discriminant > 0. {
             for &t in &[
@@ -222,8 +221,8 @@ impl Object for Sphere {
                     return Some(HitRecord {
                         t,
                         p,
-                        normal: (p - self.center) / self.radius,
-                        material: Arc::clone(&self.material),
+                        normal: (p - *center) / *radius,
+                        material: Arc::clone(&material),
                     });
                 }
             }
@@ -232,28 +231,23 @@ impl Object for Sphere {
     }
 }
 
-impl<T> Object for [T]
-where
-    T: std::ops::Deref<Target = dyn Object> + Send + Sync,
-{
-    fn hit(&self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord> {
-        self.iter().fold(None, |hit, obj| {
-            if let Some(rec) = obj.hit(ray, t_range.clone()) {
-                let hit_t = hit.as_ref().map(|h| h.t).unwrap_or(t_range.end);
-                if rec.t < hit_t {
-                    return Some(rec);
-                }
+fn hit_slice(slice: &[Object], ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord> {
+    slice.iter().fold(None, |hit, obj| {
+        if let Some(rec) = obj.hit(ray, t_range.clone()) {
+            let hit_t = hit.as_ref().map(|h| h.t).unwrap_or(t_range.end);
+            if rec.t < hit_t {
+                return Some(rec);
             }
-            hit
-        })
-    }
+        }
+        hit
+    })
 }
 
-fn color(world: &[Box<dyn Object>], mut ray: Ray) -> Vec3 {
+fn color(world: &[Object], mut ray: Ray) -> Vec3 {
     let mut strength = Vec3::from(1.);
     let mut bounces = 0;
 
-    while let Some(hit) = world.hit(&ray, 0.001..std::f32::MAX) {
+    while let Some(hit) = hit_slice(world, &ray, 0.001..std::f32::MAX) {
         if bounces < 50 {
             if let Some((new_ray, attenuation)) = hit.material.scatter(&ray, &hit) {
                 ray = new_ray;
@@ -427,14 +421,14 @@ impl Material for Dielectric {
     }
 }
 
-fn random_scene() -> Vec<Box<dyn Object>> {
-    let mut world: Vec<Box<dyn Object>> = vec![Box::new(Sphere {
+fn random_scene() -> Vec<Object> {
+    let mut world = vec![Object::Sphere {
         center: Vec3(0., -1000., 0.),
         radius: 1000.,
         material: Arc::new(Lambertian {
             albedo: Vec3::from(0.5),
         }),
-    })];
+    }];
 
     let mut rng = rand::thread_rng();
 
@@ -449,56 +443,56 @@ fn random_scene() -> Vec<Box<dyn Object>> {
                 let choose_mat = rng.gen::<f32>();
 
                 let obj = if choose_mat < 0.8 {
-                    Box::new(Sphere {
+                    Object::Sphere {
                         center,
                         radius: 0.2,
                         material: Arc::new(Lambertian {
                             albedo: rng.gen::<Vec3>() * rng.gen::<Vec3>(),
                         }),
-                    })
+                    }
                 } else if choose_mat < 0.95 {
-                    Box::new(Sphere {
+                    Object::Sphere {
                         center,
                         radius: 0.2,
                         material: Arc::new(Metal {
                             albedo: 0.5 * (1. + rng.gen::<Vec3>()),
                             fuzz: 0.5 * rng.gen::<f32>(),
                         }),
-                    })
+                    }
                 } else {
-                    Box::new(Sphere {
+                    Object::Sphere {
                         center,
                         radius: 0.2,
                         material: Arc::new(Dielectric { ref_idx: 1.5 }),
-                    })
+                    }
                 };
                 world.push(obj);
             }
         }
     }
 
-    world.push(Box::new(Sphere {
+    world.push(Object::Sphere {
         center: Vec3(0., 1., 0.),
         radius: 1.0,
         material: Arc::new(Dielectric { ref_idx: 1.5 }),
-    }));
+    });
 
-    world.push(Box::new(Sphere {
+    world.push(Object::Sphere {
         center: Vec3(-4., 1., 0.),
         radius: 1.0,
         material: Arc::new(Lambertian {
             albedo: Vec3(0.4, 0.2, 0.1),
         }),
-    }));
+    });
 
-    world.push(Box::new(Sphere {
+    world.push(Object::Sphere {
         center: Vec3(4., 1., 0.),
         radius: 1.0,
         material: Arc::new(Metal {
             albedo: Vec3(0.7, 0.6, 0.5),
             fuzz: 0.,
         }),
-    }));
+    });
 
     world
 }
