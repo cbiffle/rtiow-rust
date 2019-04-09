@@ -49,6 +49,14 @@ impl std::ops::Mul<Vec3> for f32 {
     }
 }
 
+impl std::ops::Mul for Vec3 {
+    type Output = Vec3;
+
+    fn mul(self, rhs: Vec3) -> Self::Output {
+        Vec3(self.0 * rhs.0, self.1 * rhs.1, self.2 * rhs.2)
+    }
+}
+
 impl std::ops::Div<f32> for Vec3 {
     type Output = Vec3;
 
@@ -238,24 +246,43 @@ struct Camera {
     lower_left_corner: Vec3,
     horizontal: Vec3,
     vertical: Vec3,
-}
-
-impl Default for Camera {
-    fn default() -> Self {
-        Camera {
-            origin: Vec3::default(),
-            lower_left_corner: Vec3(-2., -1., -1.),
-            horizontal: Vec3(4., 0., 0.),
-            vertical: Vec3(0., 2., 0.),
-        }
-    }
+    u: Vec3,
+    v: Vec3,
+    w: Vec3,
+    lens_radius: f32,
 }
 
 impl Camera {
-    fn get_ray(&self, u: f32, v: f32) -> Ray {
+    fn look(look_from: Vec3, look_at: Vec3, up: Vec3, fov: f32, aspect: f32, aperture: f32, focus_dist: f32) -> Self {
+        let lens_radius = aperture / 2.;
+        let theta = fov * std::f32::consts::PI / 180.;
+        let half_height = f32::tan(theta / 2.);
+        let half_width = aspect * half_height;
+        let origin = look_from;
+        let w = (look_from - look_at).into_unit();
+        let u = up.cross(&w).into_unit();
+        let v = w.cross(&u);
+        let lower_left_corner = origin - half_width * focus_dist * u - half_height * focus_dist * v - focus_dist * w;
+        let horizontal = 2. * half_width * focus_dist * u;
+        let vertical = 2. * half_height * focus_dist * v;
+        Camera {
+            origin,
+            lower_left_corner,
+            horizontal,
+            vertical,
+            u,
+            v,
+            w,
+            lens_radius,
+        }
+    }
+
+    fn get_ray(&self, s: f32, t: f32) -> Ray {
+        let rd = self.lens_radius * in_unit_disc();
+        let offset = rd[X] * self.u + rd[Y] * self.v;
         Ray {
-            origin: self.origin,
-            direction: self.lower_left_corner + u * self.horizontal + v * self.vertical,
+            origin: self.origin + offset,
+            direction: self.lower_left_corner + s * self.horizontal + t * self.vertical - self.origin - offset,
         }
     }
 }
@@ -264,6 +291,16 @@ fn in_unit_sphere() -> Vec3 {
     let mut rng = rand::thread_rng();
     loop {
         let v = 2. * Vec3(rng.gen(), rng.gen(), rng.gen()) - Vec3(1., 1., 1.);
+        if v.dot(&v) < 1. {
+            return v;
+        }
+    }
+}
+
+fn in_unit_disc() -> Vec3 {
+    let mut rng = rand::thread_rng();
+    loop {
+        let v = 2. * Vec3(rng.gen(), rng.gen(), 0.) - Vec3(1., 1., 0.);
         if v.dot(&v) < 1. {
             return v;
         }
@@ -352,8 +389,8 @@ impl Material for Dielectric {
 }
 
 fn main() {
-    const NX: usize = 200;
-    const NY: usize = 100;
+    const NX: usize = 400;
+    const NY: usize = 200;
     const NS: usize = 100;
 
     println!("P3\n{} {}\n255", NX, NY);
@@ -393,7 +430,12 @@ fn main() {
         }),
     ];
 
-    let camera = Camera::default();
+    let look_from = Vec3(-2., 2., 1.);
+    let look_at = Vec3(0., 0., -1.);
+    let dist_to_focus = (look_from - look_at).length();
+    let aperture = 0.2;
+
+    let camera = Camera::look(look_from, look_at, Vec3(0., 1., 0.), 90., NX as f32 / NY as f32, aperture, dist_to_focus);
     let mut rng = rand::thread_rng();
 
     for j in (0..NY).rev() {
