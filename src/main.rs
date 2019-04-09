@@ -253,7 +253,15 @@ struct Camera {
 }
 
 impl Camera {
-    fn look(look_from: Vec3, look_at: Vec3, up: Vec3, fov: f32, aspect: f32, aperture: f32, focus_dist: f32) -> Self {
+    fn look(
+        look_from: Vec3,
+        look_at: Vec3,
+        up: Vec3,
+        fov: f32,
+        aspect: f32,
+        aperture: f32,
+        focus_dist: f32,
+    ) -> Self {
         let lens_radius = aperture / 2.;
         let theta = fov * std::f32::consts::PI / 180.;
         let half_height = f32::tan(theta / 2.);
@@ -262,7 +270,8 @@ impl Camera {
         let w = (look_from - look_at).into_unit();
         let u = up.cross(&w).into_unit();
         let v = w.cross(&u);
-        let lower_left_corner = origin - half_width * focus_dist * u - half_height * focus_dist * v - focus_dist * w;
+        let lower_left_corner =
+            origin - half_width * focus_dist * u - half_height * focus_dist * v - focus_dist * w;
         let horizontal = 2. * half_width * focus_dist * u;
         let vertical = 2. * half_height * focus_dist * v;
         Camera {
@@ -282,7 +291,9 @@ impl Camera {
         let offset = rd[X] * self.u + rd[Y] * self.v;
         Ray {
             origin: self.origin + offset,
-            direction: self.lower_left_corner + s * self.horizontal + t * self.vertical - self.origin - offset,
+            direction: self.lower_left_corner + s * self.horizontal + t * self.vertical
+                - self.origin
+                - offset,
         }
     }
 }
@@ -388,54 +399,110 @@ impl Material for Dielectric {
     }
 }
 
+fn random_scene() -> Vec<Box<dyn Object>> {
+    let mut world: Vec<Box<dyn Object>> = vec![Box::new(Sphere {
+        center: Vec3(0., -1000., 0.),
+        radius: 1000.,
+        material: Rc::new(Lambertian {
+            albedo: Vec3(0.5, 0.5, 0.5),
+        }),
+    })];
+
+    let mut rng = rand::thread_rng();
+
+    for a in -11..11 {
+        for b in -11..11 {
+            let center = Vec3(
+                a as f32 + 0.9 * rng.gen::<f32>(),
+                0.2,
+                b as f32 + 0.9 * rng.gen::<f32>(),
+            );
+            if (center - Vec3(4., 0.2, 0.)).length() > 0.9 {
+                let choose_mat = rng.gen::<f32>();
+
+                let obj = if choose_mat < 0.8 {
+                    Box::new(Sphere {
+                        center,
+                        radius: 0.2,
+                        material: Rc::new(Lambertian {
+                            albedo: Vec3(
+                                rng.gen::<f32>() * rng.gen::<f32>(),
+                                rng.gen::<f32>() * rng.gen::<f32>(),
+                                rng.gen::<f32>() * rng.gen::<f32>(),
+                            ),
+                        }),
+                    })
+                } else if choose_mat < 0.95 {
+                    Box::new(Sphere {
+                        center,
+                        radius: 0.2,
+                        material: Rc::new(Metal {
+                            albedo: Vec3(
+                                0.5 * (1. + rng.gen::<f32>()),
+                                0.5 * (1. + rng.gen::<f32>()),
+                                0.5 * (1. + rng.gen::<f32>()),
+                            ),
+                            fuzz: 0.5 * rng.gen::<f32>(),
+                        }),
+                    })
+                } else {
+                    Box::new(Sphere {
+                        center,
+                        radius: 0.2,
+                        material: Rc::new(Dielectric {
+                            ref_idx: 1.5,
+                        }),
+                    })
+                };
+                world.push(obj);
+            }
+        }
+    }
+
+    world.push(Box::new(Sphere {
+        center: Vec3(0., 1., 0.),
+        radius: 1.0,
+        material: Rc::new(Dielectric { ref_idx: 1.5 }),
+    }));
+
+    world.push(Box::new(Sphere {
+        center: Vec3(-4., 1., 0.),
+        radius: 1.0,
+        material: Rc::new(Lambertian { albedo: Vec3(0.4, 0.2, 0.1) }),
+    }));
+
+    world.push(Box::new(Sphere {
+        center: Vec3(4., 1., 0.),
+        radius: 1.0,
+        material: Rc::new(Metal { albedo: Vec3(0.7, 0.6, 0.5), fuzz: 0. }),
+    }));
+
+    world
+}
+
 fn main() {
-    const NX: usize = 400;
-    const NY: usize = 200;
-    const NS: usize = 100;
+    const NX: usize = 800;
+    const NY: usize = 600;
+    const NS: usize = 10;
 
     println!("P3\n{} {}\n255", NX, NY);
 
-    let world: &[Box<dyn Object>] = &[
-        Box::new(Sphere {
-            center: Vec3(0., 0., -1.),
-            radius: 0.5,
-            material: Rc::new(Lambertian {
-                albedo: Vec3(0.8, 0.3, 0.3),
-            }),
-        }),
-        Box::new(Sphere {
-            center: Vec3(0., -100.5, -1.),
-            radius: 100.,
-            material: Rc::new(Lambertian {
-                albedo: Vec3(0.8, 0.8, 0.0),
-            }),
-        }),
-        Box::new(Sphere {
-            center: Vec3(1., 0., -1.),
-            radius: 0.5,
-            material: Rc::new(Metal {
-                albedo: Vec3(0.8, 0.6, 0.2),
-                fuzz: 0.01,
-            }),
-        }),
-        Box::new(Sphere {
-            center: Vec3(-1., 0., -1.),
-            radius: 0.5,
-            material: Rc::new(Dielectric { ref_idx: 1.5 }),
-        }),
-        Box::new(Sphere {
-            center: Vec3(-1., 0., -1.),
-            radius: -0.45,
-            material: Rc::new(Dielectric { ref_idx: 1.5 }),
-        }),
-    ];
+    let world = random_scene();
 
-    let look_from = Vec3(-2., 2., 1.);
-    let look_at = Vec3(0., 0., -1.);
-    let dist_to_focus = (look_from - look_at).length();
-    let aperture = 0.2;
+    let look_from = Vec3(13., 2., 3.);
+    let look_at = Vec3(0., 0., 0.);
+    let dist_to_focus = 10.;
+    let aperture = 0.1;
 
-    let camera = Camera::look(look_from, look_at, Vec3(0., 1., 0.), 90., NX as f32 / NY as f32, aperture, dist_to_focus);
+    let camera = Camera::look(
+        look_from,
+        look_at,
+        Vec3(0., 1., 0.),
+        20.,
+        NX as f32 / NY as f32,
+        aperture,
+        dist_to_focus,
+    );
     let mut rng = rand::thread_rng();
 
     for j in (0..NY).rev() {
@@ -445,7 +512,7 @@ fn main() {
                     let u = (i as f32 + rng.gen::<f32>()) / NX as f32;
                     let v = (j as f32 + rng.gen::<f32>()) / NY as f32;
                     let r = camera.get_ray(u, v);
-                    color(world, r)
+                    color(&world, r)
                 })
                 .sum();
             let col = col / NS as f32;
