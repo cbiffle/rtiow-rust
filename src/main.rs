@@ -187,11 +187,11 @@ impl Ray {
 }
 
 #[derive(Clone, Debug)]
-pub struct HitRecord {
+pub struct HitRecord<'m> {
     t: f32,
     p: Vec3,
     normal: Vec3,
-    material: Arc<Material>,
+    material: &'m Material,
 }
 
 enum Object {
@@ -203,7 +203,7 @@ enum Object {
 }
 
 impl Object {
-    fn hit(&self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord> {
+    fn hit<'m>(&'m self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord<'m>> {
         let Object::Sphere {
             center,
             radius,
@@ -226,7 +226,7 @@ impl Object {
                         t,
                         p,
                         normal: (p - *center) / *radius,
-                        material: Arc::clone(&material),
+                        material: &*material,
                     });
                 }
             }
@@ -235,7 +235,11 @@ impl Object {
     }
 }
 
-fn hit_slice(slice: &[Object], ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord> {
+fn hit_slice<'m>(
+    slice: &'m [Object],
+    ray: &Ray,
+    t_range: std::ops::Range<f32>,
+) -> Option<HitRecord<'m>> {
     slice.iter().fold(None, |hit, obj| {
         if let Some(rec) = obj.hit(ray, t_range.clone()) {
             let hit_t = hit.as_ref().map(|h| h.t).unwrap_or(t_range.end);
