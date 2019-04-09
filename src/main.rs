@@ -1,4 +1,5 @@
 use rand::prelude::*;
+use rayon::prelude::*;
 use std::sync::Arc;
 
 #[derive(Copy, Clone, Default, Debug)]
@@ -484,9 +485,10 @@ fn random_scene() -> Vec<Box<dyn Object>> {
 struct Image(Vec<Vec<Vec3>>);
 
 impl Image {
-    fn compute(nx: usize, ny: usize, mut f: impl FnMut(usize, usize) -> Vec3) -> Image {
+    fn compute(nx: usize, ny: usize, f: impl Fn(usize, usize) -> Vec3 + Sync) -> Image {
         Image(
             (0..ny)
+                .into_par_iter()
                 .rev()
                 .map(|y| (0..nx).map(|x| f(x, y)).collect())
                 .collect(),
@@ -530,11 +532,11 @@ fn main() {
         aperture,
         dist_to_focus,
     );
-    let mut rng = rand::thread_rng();
 
     let image = Image::compute(NX, NY, |x, y| {
         let col: Vec3 = (0..NS)
             .map(|_| {
+                let mut rng = rand::thread_rng();
                 let u = (x as f32 + rng.gen::<f32>()) / NX as f32;
                 let v = (y as f32 + rng.gen::<f32>()) / NY as f32;
                 let r = camera.get_ray(u, v);
