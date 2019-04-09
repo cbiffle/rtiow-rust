@@ -1,3 +1,6 @@
+use rand::prelude::*;
+use std::rc::Rc;
+
 #[derive(Copy, Clone, Default, Debug)]
 struct Vec3(f32, f32, f32);
 
@@ -20,6 +23,21 @@ impl Vec3 {
 
     pub fn into_unit(self) -> Self {
         self / self.length()
+    }
+}
+
+fn reflect(v: &Vec3, n: &Vec3) -> Vec3 {
+    *v - 2. * v.dot(n) * *n
+}
+
+fn refract(v: &Vec3, n: &Vec3, ni_over_nt: f32) -> Option<Vec3> {
+    let uv = v.into_unit();
+    let dt = uv.dot(n);
+    let discriminant = 1.0 - ni_over_nt * ni_over_nt * (1. - dt * dt);
+    if discriminant > 0. {
+        Some(ni_over_nt * (uv - dt * *n) - discriminant.sqrt() * *n)
+    } else {
+        None
     }
 }
 
@@ -55,11 +73,31 @@ impl std::ops::Sub for Vec3 {
     }
 }
 
+impl std::ops::Neg for Vec3 {
+    type Output = Vec3;
+
+    fn neg(self) -> Self::Output {
+        Vec3(-self.0, -self.1, -self.2)
+    }
+}
+
+impl std::iter::Sum for Vec3 {
+    fn sum<I>(iter: I) -> Self
+    where
+        I: Iterator<Item = Self>,
+    {
+        iter.fold(Vec3::default(), |sum, x| sum + x)
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
-pub enum Channel { R, G, B }
+pub enum Channel {
+    R,
+    G,
+    B,
+}
 
 use Channel::*;
-
 
 impl ::std::ops::Index<Channel> for Vec3 {
     type Output = f32;
@@ -74,10 +112,13 @@ impl ::std::ops::Index<Channel> for Vec3 {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum Axis { X, Y, Z }
+pub enum Axis {
+    X,
+    Y,
+    Z,
+}
 
 use Axis::*;
-
 
 impl ::std::ops::Index<Axis> for Vec3 {
     type Output = f32;
@@ -103,11 +144,12 @@ impl Ray {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct HitRecord {
     t: f32,
     p: Vec3,
     normal: Vec3,
+    material: Rc<dyn Material>,
 }
 
 trait Object {
@@ -118,6 +160,7 @@ trait Object {
 pub struct Sphere {
     center: Vec3,
     radius: f32,
+    material: Rc<dyn Material>,
 }
 
 impl Object for Sphere {
@@ -128,14 +171,18 @@ impl Object for Sphere {
         let c = oc.dot(&oc) - self.radius * self.radius;
         let discriminant = b * b - a * c;
         if discriminant > 0. {
-            for &t in &[(-b - discriminant.sqrt()) / a, (-b + discriminant.sqrt()) / a] {
+            for &t in &[
+                (-b - discriminant.sqrt()) / a,
+                (-b + discriminant.sqrt()) / a,
+            ] {
                 if t < t_range.end && t >= t_range.start {
                     let p = ray.point_at_parameter(t);
                     return Some(HitRecord {
                         t,
                         p,
                         normal: (p - self.center) / self.radius,
-                    })
+                        material: Rc::clone(&self.material),
+                    });
                 }
             }
         }
@@ -143,57 +190,224 @@ impl Object for Sphere {
     }
 }
 
-impl<T> Object for [T] where T: std::ops::Deref<Target = dyn Object> {
+impl<T> Object for [T]
+where
+    T: std::ops::Deref<Target = dyn Object>,
+{
     fn hit(&self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord> {
-        self.iter()
-            .fold(None, |hit, obj| {
-                if let Some(rec) = obj.hit(ray, t_range.clone()) {
-                    let hit_t = hit.map(|h| h.t).unwrap_or(t_range.end);
-                    if rec.t < hit_t {
-                        return Some(rec)
-                    }
+        self.iter().fold(None, |hit, obj| {
+            if let Some(rec) = obj.hit(ray, t_range.clone()) {
+                let hit_t = hit.as_ref().map(|h| h.t).unwrap_or(t_range.end);
+                if rec.t < hit_t {
+                    return Some(rec);
                 }
-                hit
-            })
+            }
+            hit
+        })
     }
 }
 
-fn color(ray: &Ray, world: &[Box<dyn Object>]) -> Vec3 {
-    if let Some(hit) = world.hit(ray, 0. .. std::f32::MAX) {
-        return 0.5 * Vec3(hit.normal[X] + 1., hit.normal[Y] + 1., hit.normal[Z] + 1.)
+fn color(world: &[Box<dyn Object>], mut ray: Ray) -> Vec3 {
+    let mut strength = Vec3(1., 1., 1.);
+    let mut bounces = 0;
+
+    while let Some(hit) = world.hit(&ray, 0.001..std::f32::MAX) {
+        if bounces < 50 {
+            if let Some((new_ray, attenuation)) = hit.material.scatter(&ray, &hit) {
+                ray = new_ray;
+                strength = Vec3(
+                    strength.0 * attenuation.0,
+                    strength.1 * attenuation.1,
+                    strength.2 * attenuation.2,
+                );
+                bounces += 1;
+                continue;
+            }
+        }
+        return Vec3::default();
     }
 
     let unit_direction = ray.direction.into_unit();
     let t = 0.5 * (unit_direction[Y] + 1.0);
-    debug_assert!(t >= 0. && t <= 1., "{:?}", unit_direction);
-    (1. - t) * Vec3(1., 1., 1.) + t * Vec3(0.5, 0.7, 1.0)
+    let col = (1. - t) * Vec3(1., 1., 1.) + t * Vec3(0.5, 0.7, 1.0);
+    Vec3(strength.0 * col.0, strength.1 * col.1, strength.2 * col.2)
+}
+
+struct Camera {
+    origin: Vec3,
+    lower_left_corner: Vec3,
+    horizontal: Vec3,
+    vertical: Vec3,
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        Camera {
+            origin: Vec3::default(),
+            lower_left_corner: Vec3(-2., -1., -1.),
+            horizontal: Vec3(4., 0., 0.),
+            vertical: Vec3(0., 2., 0.),
+        }
+    }
+}
+
+impl Camera {
+    fn get_ray(&self, u: f32, v: f32) -> Ray {
+        Ray {
+            origin: self.origin,
+            direction: self.lower_left_corner + u * self.horizontal + v * self.vertical,
+        }
+    }
+}
+
+fn in_unit_sphere() -> Vec3 {
+    let mut rng = rand::thread_rng();
+    loop {
+        let v = 2. * Vec3(rng.gen(), rng.gen(), rng.gen()) - Vec3(1., 1., 1.);
+        if v.dot(&v) < 1. {
+            return v;
+        }
+    }
+}
+
+trait Material: std::fmt::Debug {
+    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Vec3)>;
+}
+
+#[derive(Debug)]
+struct Lambertian {
+    albedo: Vec3,
+}
+
+impl Material for Lambertian {
+    fn scatter(&self, _ray: &Ray, hit: &HitRecord) -> Option<(Ray, Vec3)> {
+        let target = hit.p + hit.normal + in_unit_sphere();
+        let scattered = Ray {
+            origin: hit.p,
+            direction: target - hit.p,
+        };
+        Some((scattered, self.albedo))
+    }
+}
+
+#[derive(Debug)]
+struct Metal {
+    albedo: Vec3,
+    fuzz: f32,
+}
+
+impl Material for Metal {
+    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Vec3)> {
+        let scattered = Ray {
+            origin: hit.p,
+            direction: reflect(&ray.direction.into_unit(), &hit.normal)
+                + self.fuzz * in_unit_sphere(),
+        };
+        if scattered.direction.dot(&hit.normal) > 0. {
+            Some((scattered, self.albedo))
+        } else {
+            None
+        }
+    }
+}
+
+fn schlick(cos: f32, ref_idx: f32) -> f32 {
+    let r0 = (1. - ref_idx) / (1. + ref_idx);
+    let r0 = r0 * r0;
+    r0 + (1. - r0) * f32::powf(1. - cos, 5.)
+}
+
+#[derive(Debug)]
+struct Dielectric {
+    ref_idx: f32,
+}
+
+impl Material for Dielectric {
+    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Vec3)> {
+        let (outward_normal, ni_over_nt, cosine) = if ray.direction.dot(&hit.normal) > 0. {
+            (
+                -hit.normal,
+                self.ref_idx,
+                self.ref_idx * ray.direction.dot(&hit.normal) / ray.direction.length(),
+            )
+        } else {
+            (
+                hit.normal,
+                1.0 / self.ref_idx,
+                -ray.direction.dot(&hit.normal) / ray.direction.length(),
+            )
+        };
+
+        let direction = refract(&ray.direction, &outward_normal, ni_over_nt)
+            .filter(|_| rand::thread_rng().gen::<f32>() >= schlick(cosine, self.ref_idx))
+            .unwrap_or_else(|| reflect(&ray.direction, &hit.normal));
+
+        let attenuation = Vec3(1.0, 1.0, 1.0);
+        let ray = Ray {
+            origin: hit.p,
+            direction,
+        };
+        Some((ray, attenuation))
+    }
 }
 
 fn main() {
     const NX: usize = 200;
     const NY: usize = 100;
+    const NS: usize = 100;
 
     println!("P3\n{} {}\n255", NX, NY);
 
-    let lower_left_corner = Vec3(-2., -1., -1.);
-    let horizontal = Vec3(4., 0., 0.);
-    let vertical = Vec3(0., 2., 0.);
-    let origin = Vec3::default();
-
-    let world: [Box<dyn Object>; 2] = [
-        Box::new(Sphere { center: Vec3(0., 0., -1.), radius: 0.5 }),
-        Box::new(Sphere { center: Vec3(0., -100.5, -1.), radius: 100. }),
+    let world: &[Box<dyn Object>] = &[
+        Box::new(Sphere {
+            center: Vec3(0., 0., -1.),
+            radius: 0.5,
+            material: Rc::new(Lambertian {
+                albedo: Vec3(0.8, 0.3, 0.3),
+            }),
+        }),
+        Box::new(Sphere {
+            center: Vec3(0., -100.5, -1.),
+            radius: 100.,
+            material: Rc::new(Lambertian {
+                albedo: Vec3(0.8, 0.8, 0.0),
+            }),
+        }),
+        Box::new(Sphere {
+            center: Vec3(1., 0., -1.),
+            radius: 0.5,
+            material: Rc::new(Metal {
+                albedo: Vec3(0.8, 0.6, 0.2),
+                fuzz: 0.01,
+            }),
+        }),
+        Box::new(Sphere {
+            center: Vec3(-1., 0., -1.),
+            radius: 0.5,
+            material: Rc::new(Dielectric { ref_idx: 1.5 }),
+        }),
+        Box::new(Sphere {
+            center: Vec3(-1., 0., -1.),
+            radius: -0.45,
+            material: Rc::new(Dielectric { ref_idx: 1.5 }),
+        }),
     ];
+
+    let camera = Camera::default();
+    let mut rng = rand::thread_rng();
 
     for j in (0..NY).rev() {
         for i in 0..NX {
-            let u = i as f32 / NX as f32;
-            let v = j as f32 / NY as f32;
-            let r = Ray {
-                origin,
-                direction: lower_left_corner + u*horizontal + v*vertical,
-            };
-            let col = color(&r, &world);
+            let col: Vec3 = (0..NS)
+                .map(|_| {
+                    let u = (i as f32 + rng.gen::<f32>()) / NX as f32;
+                    let v = (j as f32 + rng.gen::<f32>()) / NY as f32;
+                    let r = camera.get_ray(u, v);
+                    color(world, r)
+                })
+                .sum();
+            let col = col / NS as f32;
+            let col = Vec3(col.0.sqrt(), col.1.sqrt(), col.2.sqrt());
 
             let ir = (255.99 * col[R]) as i32;
             let ig = (255.99 * col[G]) as i32;
