@@ -248,7 +248,6 @@ struct Camera {
     vertical: Vec3,
     u: Vec3,
     v: Vec3,
-    w: Vec3,
     lens_radius: f32,
 }
 
@@ -281,7 +280,6 @@ impl Camera {
             vertical,
             u,
             v,
-            w,
             lens_radius,
         }
     }
@@ -449,9 +447,7 @@ fn random_scene() -> Vec<Box<dyn Object>> {
                     Box::new(Sphere {
                         center,
                         radius: 0.2,
-                        material: Rc::new(Dielectric {
-                            ref_idx: 1.5,
-                        }),
+                        material: Rc::new(Dielectric { ref_idx: 1.5 }),
                     })
                 };
                 world.push(obj);
@@ -468,13 +464,18 @@ fn random_scene() -> Vec<Box<dyn Object>> {
     world.push(Box::new(Sphere {
         center: Vec3(-4., 1., 0.),
         radius: 1.0,
-        material: Rc::new(Lambertian { albedo: Vec3(0.4, 0.2, 0.1) }),
+        material: Rc::new(Lambertian {
+            albedo: Vec3(0.4, 0.2, 0.1),
+        }),
     }));
 
     world.push(Box::new(Sphere {
         center: Vec3(4., 1., 0.),
         radius: 1.0,
-        material: Rc::new(Metal { albedo: Vec3(0.7, 0.6, 0.5), fuzz: 0. }),
+        material: Rc::new(Metal {
+            albedo: Vec3(0.7, 0.6, 0.5),
+            fuzz: 0.,
+        }),
     }));
 
     world
