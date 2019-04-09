@@ -481,12 +481,38 @@ fn random_scene() -> Vec<Box<dyn Object>> {
     world
 }
 
-fn main() {
-    const NX: usize = 800;
-    const NY: usize = 600;
-    const NS: usize = 10;
+struct Image(Vec<Vec<Vec3>>);
 
-    println!("P3\n{} {}\n255", NX, NY);
+impl Image {
+    fn compute(nx: usize, ny: usize, mut f: impl FnMut(usize, usize) -> Vec3) -> Image {
+        Image(
+            (0..ny)
+                .rev()
+                .map(|y| (0..nx).map(|x| f(x, y)).collect())
+                .collect(),
+        )
+    }
+}
+
+fn print_ppm(image: Image) {
+    println!("P3\n{} {}\n255", image.0[0].len(), image.0.len());
+    for scanline in image.0 {
+        for col in scanline {
+            let col = Vec3(col.0.sqrt(), col.1.sqrt(), col.2.sqrt());
+
+            let ir = (255.99 * col[R]) as i32;
+            let ig = (255.99 * col[G]) as i32;
+            let ib = (255.99 * col[B]) as i32;
+
+            println!("{} {} {}", ir, ig, ib);
+        }
+    }
+}
+
+fn main() {
+    const NX: usize = 200;
+    const NY: usize = 100;
+    const NS: usize = 50;
 
     let world = random_scene();
 
@@ -506,24 +532,16 @@ fn main() {
     );
     let mut rng = rand::thread_rng();
 
-    for j in (0..NY).rev() {
-        for i in 0..NX {
-            let col: Vec3 = (0..NS)
-                .map(|_| {
-                    let u = (i as f32 + rng.gen::<f32>()) / NX as f32;
-                    let v = (j as f32 + rng.gen::<f32>()) / NY as f32;
-                    let r = camera.get_ray(u, v);
-                    color(&world, r)
-                })
-                .sum();
-            let col = col / NS as f32;
-            let col = Vec3(col.0.sqrt(), col.1.sqrt(), col.2.sqrt());
-
-            let ir = (255.99 * col[R]) as i32;
-            let ig = (255.99 * col[G]) as i32;
-            let ib = (255.99 * col[B]) as i32;
-
-            println!("{} {} {}", ir, ig, ib);
-        }
-    }
+    let image = Image::compute(NX, NY, |x, y| {
+        let col: Vec3 = (0..NS)
+            .map(|_| {
+                let u = (x as f32 + rng.gen::<f32>()) / NX as f32;
+                let v = (y as f32 + rng.gen::<f32>()) / NY as f32;
+                let r = camera.get_ray(u, v);
+                color(&world, r)
+            })
+            .sum();
+        col / NS as f32
+    });
+    print_ppm(image);
 }
