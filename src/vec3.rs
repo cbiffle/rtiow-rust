@@ -6,8 +6,7 @@ use rand::prelude::*;
 pub struct Vec3(pub f32, pub f32, pub f32);
 
 impl Vec3 {
-    pub fn in_unit_sphere() -> Self {
-        let mut rng = rand::thread_rng();
+    pub fn in_unit_sphere(rng: &mut impl Rng) -> Self {
         loop {
             let v = 2. * rng.gen::<Vec3>() - Vec3::from(1.);
             if v.dot(v) < 1. {
@@ -16,8 +15,7 @@ impl Vec3 {
         }
     }
 
-    pub fn in_unit_disc() -> Self {
-        let mut rng = rand::thread_rng();
+    pub fn in_unit_disc(rng: &mut impl Rng) -> Self {
         loop {
             let v = 2. * Vec3(rng.gen(), rng.gen(), 0.) - Vec3(1., 1., 0.);
             if v.dot(v) < 1. {

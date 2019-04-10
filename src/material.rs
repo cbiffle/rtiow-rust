@@ -14,10 +14,10 @@ pub enum Material {
 }
 
 impl Material {
-    pub fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Vec3)> {
+    pub fn scatter(&self, ray: &Ray, hit: &HitRecord, rng: &mut impl Rng) -> Option<(Ray, Vec3)> {
         match self {
             Material::Lambertian { albedo } => {
-                let target = hit.p + hit.normal + Vec3::in_unit_sphere();
+                let target = hit.p + hit.normal + Vec3::in_unit_sphere(rng);
                 let scattered = Ray {
                     origin: hit.p,
                     direction: target - hit.p,
@@ -28,7 +28,7 @@ impl Material {
                 let scattered = Ray {
                     origin: hit.p,
                     direction: reflect(ray.direction.into_unit(), hit.normal)
-                        + *fuzz * Vec3::in_unit_sphere(),
+                        + *fuzz * Vec3::in_unit_sphere(rng),
                 };
                 if scattered.direction.dot(hit.normal) > 0. {
                     Some((scattered, *albedo))
@@ -52,7 +52,7 @@ impl Material {
                 };
 
                 let direction = refract(ray.direction, outward_normal, ni_over_nt)
-                    .filter(|_| rand::thread_rng().gen::<f32>() >= schlick(cosine, *ref_idx))
+                    .filter(|_| rng.gen::<f32>() >= schlick(cosine, *ref_idx))
                     .unwrap_or_else(|| reflect(ray.direction, hit.normal));
 
                 let attenuation = Vec3::from(1.);

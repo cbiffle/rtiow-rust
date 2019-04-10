@@ -11,13 +11,13 @@ use crate::object::{HitRecord, Object, hit_slice};
 use crate::vec3::{*, Axis::*, Channel::*};
 use crate::ray::Ray;
 
-fn color(world: &[Object], mut ray: Ray) -> Vec3 {
+fn color(world: &[Object], mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
     let mut strength = Vec3::from(1.);
     let mut bounces = 0;
 
     while let Some(hit) = hit_slice(world, &ray, 0.001..std::f32::MAX) {
         if bounces < 50 {
-            if let Some((new_ray, attenuation)) = hit.material.scatter(&ray, &hit) {
+            if let Some((new_ray, attenuation)) = hit.material.scatter(&ray, &hit, rng) {
                 ray = new_ray;
                 strength = strength * attenuation;
                 bounces += 1;
@@ -76,8 +76,8 @@ impl Camera {
         }
     }
 
-    fn get_ray(&self, s: f32, t: f32) -> Ray {
-        let rd = self.lens_radius * Vec3::in_unit_disc();
+    fn get_ray(&self, s: f32, t: f32, rng: &mut impl Rng) -> Ray {
+        let rd = self.lens_radius * Vec3::in_unit_disc(rng);
         let offset = rd[X] * self.u + rd[Y] * self.v;
         Ray {
             origin: self.origin + offset,
@@ -88,7 +88,7 @@ impl Camera {
     }
 }
 
-fn random_scene() -> Vec<Object> {
+fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
     let mut world = vec![Object::Sphere {
         center: Vec3(0., -1000., 0.),
         radius: 1000.,
@@ -96,8 +96,6 @@ fn random_scene() -> Vec<Object> {
             albedo: Vec3::from(0.5),
         },
     }];
-
-    let mut rng = rand::thread_rng();
 
     for a in -11..11 {
         for b in -11..11 {
@@ -167,7 +165,7 @@ fn random_scene() -> Vec<Object> {
 struct Image(Vec<Vec<Vec3>>);
 
 impl Image {
-    fn compute(nx: usize, ny: usize, f: impl Fn(usize, usize) -> Vec3 + Sync) -> Image {
+    fn par_compute(nx: usize, ny: usize, f: impl Fn(usize, usize) -> Vec3 + Sync) -> Image {
         Image(
             (0..ny)
                 .into_par_iter()
@@ -198,7 +196,9 @@ fn main() {
     const NY: usize = 800;
     const NS: usize = 10;
 
-    let world = random_scene();
+    let mut rng = rand::rngs::SmallRng::seed_from_u64(0xDEADBEEF);
+
+    let world = random_scene(&mut rng);
 
     let look_from = Vec3(13., 2., 3.);
     let look_at = Vec3(0., 0., 0.);
@@ -215,14 +215,14 @@ fn main() {
         dist_to_focus,
     );
 
-    let image = Image::compute(NX, NY, |x, y| {
+    let image = Image::par_compute(NX, NY, |x, y| {
         let col: Vec3 = (0..NS)
             .map(|_| {
                 let mut rng = rand::thread_rng();
                 let u = (x as f32 + rng.gen::<f32>()) / NX as f32;
                 let v = (y as f32 + rng.gen::<f32>()) / NY as f32;
-                let r = camera.get_ray(u, v);
-                color(&world, r)
+                let r = camera.get_ray(u, v, &mut rng);
+                color(&world, r, &mut rng)
             })
             .sum();
         col / NS as f32
