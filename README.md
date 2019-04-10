@@ -42,6 +42,25 @@ differences.
    we're in Rust, this took [about one line of code][smp-commit] and is
    statically free of data races.
 
+5. Object (the thing Shirley called `hitable`) and Material started out as
+   traits, to follow the book's use of the "abstract base class" pattern, but
+   are now `enum`s. C++ does not have Rust-style `enum`s, but they're a useful
+   way of modeling a closed set of options like we have here. Matching on
+   `enum`s is significantly cheaper than dynamic dispatch, saving some cycles.
+
+6. Object now directly contains Material, since the random scene generator
+   doesn't share Materials among Objects, and the list of Objects contains the
+   Objects directly instead of by reference. Neither of these was an option in
+   C++ because of the *object slicing* problem. This removes two levels of
+   indirection to improve locality. (It is also worth noting that the original
+   use of a `material*` in `hit_record` is potentially unsafe, since nothing
+   prevented the `hit_record` from out-living its `material`.)
+
+7. Random number generator state is explicitly passed around, so that the entire
+   system can be made deterministic for benchmarking.
+
+
+
 ## Performance
 
 At the time of this writing, on my Skylake Thinkpad (Intel i7-8550U, 4 cores / 8
