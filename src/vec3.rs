@@ -24,6 +24,7 @@ impl Vec3 {
         }
     }
 
+    #[inline]
     pub fn dot(&self, other: Self) -> f32 {
         self.zip_with(other, core::ops::Mul::mul)
             .reduce(core::ops::Add::add)
@@ -37,6 +38,7 @@ impl Vec3 {
         )
     }
 
+    #[inline]
     pub fn length(&self) -> f32 {
         self.dot(*self).sqrt()
     }
@@ -45,14 +47,17 @@ impl Vec3 {
         self / self.length()
     }
 
+    #[inline]
     pub fn map(self, mut f: impl FnMut(f32) -> f32) -> Self {
         Vec3(f(self.0), f(self.1), f(self.2))
     }
 
+    #[inline]
     pub fn zip_with(self, other: Vec3, mut f: impl FnMut(f32, f32) -> f32) -> Self {
         Vec3(f(self.0, other.0), f(self.1, other.1), f(self.2, other.2))
     }
 
+    #[inline]
     pub fn reduce(self, f: impl Fn(f32, f32) -> f32) -> f32 {
         f(f(self.0, self.1), self.2)
     }
@@ -60,6 +65,7 @@ impl Vec3 {
 
 /// Broadcasts a single value to all vector lanes.
 impl From<f32> for Vec3 {
+    #[inline]
     fn from(v: f32) -> Self {
         Vec3(v, v, v)
     }
@@ -70,6 +76,7 @@ impl From<f32> for Vec3 {
 impl std::ops::Mul for Vec3 {
     type Output = Vec3;
 
+    #[inline]
     fn mul(self, rhs: Vec3) -> Self::Output {
         self.zip_with(rhs, std::ops::Mul::mul)
     }
@@ -79,6 +86,7 @@ impl std::ops::Mul for Vec3 {
 impl std::ops::Mul<Vec3> for f32 {
     type Output = Vec3;
 
+    #[inline]
     fn mul(self, rhs: Vec3) -> Self::Output {
         Vec3::from(self) * rhs
     }
@@ -88,6 +96,7 @@ impl std::ops::Mul<Vec3> for f32 {
 impl std::ops::Div<f32> for Vec3 {
     type Output = Vec3;
 
+    #[inline]
     fn div(self, rhs: f32) -> Self::Output {
         self.map(|x| x / rhs)
     }
@@ -96,6 +105,7 @@ impl std::ops::Div<f32> for Vec3 {
 impl std::ops::Add for Vec3 {
     type Output = Vec3;
 
+    #[inline]
     fn add(self, rhs: Vec3) -> Self::Output {
         self.zip_with(rhs, std::ops::Add::add)
     }
@@ -104,6 +114,7 @@ impl std::ops::Add for Vec3 {
 impl std::ops::Add<Vec3> for f32 {
     type Output = Vec3;
 
+    #[inline]
     fn add(self, rhs: Vec3) -> Self::Output {
         rhs.map(|x| self + x)
     }
@@ -112,6 +123,7 @@ impl std::ops::Add<Vec3> for f32 {
 impl std::ops::Sub for Vec3 {
     type Output = Vec3;
 
+    #[inline]
     fn sub(self, rhs: Vec3) -> Self::Output {
         self.zip_with(rhs, std::ops::Sub::sub)
     }
@@ -120,12 +132,14 @@ impl std::ops::Sub for Vec3 {
 impl std::ops::Neg for Vec3 {
     type Output = Vec3;
 
+    #[inline]
     fn neg(self) -> Self::Output {
         self.map(std::ops::Neg::neg)
     }
 }
 
 impl std::iter::Sum for Vec3 {
+    #[inline]
     fn sum<I>(iter: I) -> Self
     where
         I: Iterator<Item = Self>,
@@ -139,6 +153,7 @@ impl std::iter::Sum for Vec3 {
 /// The resulting vector has each component in the half-open range `[0,1)`. Note
 /// that this is *not* a unit vector.
 impl rand::distributions::Distribution<Vec3> for rand::distributions::Standard {
+    #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Vec3 {
         Vec3(rng.gen(), rng.gen(), rng.gen())
     }

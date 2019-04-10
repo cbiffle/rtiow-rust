@@ -19,6 +19,7 @@ pub enum Object {
 }
 
 impl Object {
+    #[inline]
     pub fn hit<'m>(&'m self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord<'m>> {
         let Object::Sphere {
             center,
