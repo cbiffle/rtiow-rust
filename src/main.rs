@@ -1,86 +1,15 @@
+mod material;
+mod object;
+mod ray;
 mod vec3;
 
 use rand::prelude::*;
 use rayon::prelude::*;
 
+use crate::material::Material;
+use crate::object::{HitRecord, Object, hit_slice};
 use crate::vec3::{*, Axis::*, Channel::*};
-
-#[derive(Copy, Clone, Debug)]
-struct Ray {
-    origin: Vec3,
-    direction: Vec3,
-}
-
-impl Ray {
-    pub fn point_at_parameter(&self, t: f32) -> Vec3 {
-        self.origin + t * self.direction
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct HitRecord<'m> {
-    t: f32,
-    p: Vec3,
-    normal: Vec3,
-    material: &'m Material,
-}
-
-enum Object {
-    Sphere {
-        center: Vec3,
-        radius: f32,
-        material: Material,
-    },
-}
-
-impl Object {
-    fn hit<'m>(&'m self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord<'m>> {
-        let Object::Sphere {
-            center,
-            radius,
-            material,
-        } = self;
-
-        let oc = ray.origin - *center;
-        let a = ray.direction.dot(ray.direction);
-        let b = oc.dot(ray.direction);
-        let c = oc.dot(oc) - radius * radius;
-        let discriminant = b * b - a * c;
-        if discriminant > 0. {
-            for &t in &[
-                (-b - discriminant.sqrt()) / a,
-                (-b + discriminant.sqrt()) / a,
-            ] {
-                if t < t_range.end && t >= t_range.start {
-                    let p = ray.point_at_parameter(t);
-                    return Some(HitRecord {
-                        t,
-                        p,
-                        normal: (p - *center) / *radius,
-                        material: &*material,
-                    });
-                }
-            }
-        }
-        None
-    }
-}
-
-fn hit_slice<'m>(
-    slice: &'m [Object],
-    ray: &Ray,
-    t_range: std::ops::Range<f32>,
-) -> Option<HitRecord<'m>> {
-    slice.iter().fold(None, |hit, obj| {
-        if let Some(rec) = obj.hit(ray, t_range.clone()) {
-            let hit_t = hit.as_ref().map(|h| h.t).unwrap_or(t_range.end);
-            if rec.t < hit_t {
-                return Some(rec);
-            }
-        }
-        hit
-    })
-}
+use crate::ray::Ray;
 
 fn color(world: &[Object], mut ray: Ray) -> Vec3 {
     let mut strength = Vec3::from(1.);
@@ -148,7 +77,7 @@ impl Camera {
     }
 
     fn get_ray(&self, s: f32, t: f32) -> Ray {
-        let rd = self.lens_radius * in_unit_disc();
+        let rd = self.lens_radius * Vec3::in_unit_disc();
         let offset = rd[X] * self.u + rd[Y] * self.v;
         Ray {
             origin: self.origin + offset,
@@ -157,92 +86,6 @@ impl Camera {
                 - offset,
         }
     }
-}
-
-fn in_unit_sphere() -> Vec3 {
-    let mut rng = rand::thread_rng();
-    loop {
-        let v = 2. * rng.gen::<Vec3>() - Vec3::from(1.);
-        if v.dot(v) < 1. {
-            return v;
-        }
-    }
-}
-
-fn in_unit_disc() -> Vec3 {
-    let mut rng = rand::thread_rng();
-    loop {
-        let v = 2. * Vec3(rng.gen(), rng.gen(), 0.) - Vec3(1., 1., 0.);
-        if v.dot(v) < 1. {
-            return v;
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-enum Material {
-    Lambertian { albedo: Vec3 },
-    Metal { albedo: Vec3, fuzz: f32 },
-    Dielectric { ref_idx: f32 },
-}
-
-impl Material {
-    fn scatter(&self, ray: &Ray, hit: &HitRecord) -> Option<(Ray, Vec3)> {
-        match self {
-            Material::Lambertian { albedo } => {
-                let target = hit.p + hit.normal + in_unit_sphere();
-                let scattered = Ray {
-                    origin: hit.p,
-                    direction: target - hit.p,
-                };
-                Some((scattered, *albedo))
-            }
-            Material::Metal { albedo, fuzz } => {
-                let scattered = Ray {
-                    origin: hit.p,
-                    direction: reflect(ray.direction.into_unit(), hit.normal)
-                        + *fuzz * in_unit_sphere(),
-                };
-                if scattered.direction.dot(hit.normal) > 0. {
-                    Some((scattered, *albedo))
-                } else {
-                    None
-                }
-            }
-            Material::Dielectric { ref_idx } => {
-                let (outward_normal, ni_over_nt, cosine) = if ray.direction.dot(hit.normal) > 0. {
-                    (
-                        -hit.normal,
-                        *ref_idx,
-                        *ref_idx * ray.direction.dot(hit.normal) / ray.direction.length(),
-                    )
-                } else {
-                    (
-                        hit.normal,
-                        1.0 / *ref_idx,
-                        -ray.direction.dot(hit.normal) / ray.direction.length(),
-                    )
-                };
-
-                let direction = refract(ray.direction, outward_normal, ni_over_nt)
-                    .filter(|_| rand::thread_rng().gen::<f32>() >= schlick(cosine, *ref_idx))
-                    .unwrap_or_else(|| reflect(ray.direction, hit.normal));
-
-                let attenuation = Vec3::from(1.);
-                let ray = Ray {
-                    origin: hit.p,
-                    direction,
-                };
-                Some((ray, attenuation))
-            }
-        }
-    }
-}
-
-fn schlick(cos: f32, ref_idx: f32) -> f32 {
-    let r0 = (1. - ref_idx) / (1. + ref_idx);
-    let r0 = r0 * r0;
-    r0 + (1. - r0) * f32::powf(1. - cos, 5.)
 }
 
 fn random_scene() -> Vec<Object> {
