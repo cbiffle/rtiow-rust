@@ -519,9 +519,9 @@ fn print_ppm(image: Image) {
 }
 
 fn main() {
-    const NX: usize = 200;
-    const NY: usize = 100;
-    const NS: usize = 50;
+    const NX: usize = 1200;
+    const NY: usize = 800;
+    const NS: usize = 10;
 
     let world = random_scene();
 
