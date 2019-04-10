@@ -1,7 +1,7 @@
 use rand::prelude::*;
 
-use rtiow::*;
 use rtiow::vec3::Vec3;
+use rtiow::*;
 
 fn main() {
     const NX: usize = 1200;
@@ -25,6 +25,12 @@ fn main() {
         NX as f32 / NY as f32,
         aperture,
         dist_to_focus,
+    );
+
+    eprintln!("World contains {} objects.", world.len());
+    eprintln!(
+        "Parallel casting {} x {} image using {}x oversampling.",
+        NX, NY, NS
     );
 
     let image = par_cast(NX, NY, NS, &camera, &world);
