@@ -7,10 +7,13 @@ use rand::prelude::*;
 use rayon::prelude::*;
 
 use crate::material::Material;
-use crate::object::{hit_slice, HitRecord, Object};
+use crate::object::{hit_slice, Object};
 use crate::ray::Ray;
 use crate::vec3::{Axis::*, Channel::*, *};
 
+/// Computes the pixel color along `ray` for the scene of objects `world`.
+///
+/// This is the actual ray-tracing routine.
 pub fn color(world: &[Object], mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
     let mut strength = Vec3::from(1.);
     let mut bounces = 0;
