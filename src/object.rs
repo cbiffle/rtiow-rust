@@ -83,18 +83,21 @@ pub struct HitRecord<'m> {
 }
 
 /// Runs through the `slice` of `Object`s looking for the closest hit for `ray`.
-pub fn hit_slice<'m>(
-    slice: &'m [Object],
-    ray: &Ray,
-    t_range: std::ops::Range<f32>,
-) -> Option<HitRecord<'m>> {
-    slice.iter().fold(None, |hit, obj| {
-        if let Some(rec) = obj.hit(ray, t_range.clone()) {
-            let hit_t = hit.as_ref().map(|h| h.t).unwrap_or(t_range.end);
-            if rec.t < hit_t {
-                return Some(rec);
+pub fn hit_slice<'m>(slice: &'m [Object], ray: &Ray) -> Option<HitRecord<'m>> {
+    const NEAR: f32 = 0.001;
+
+    let seed: (f32, Option<HitRecord<'m>>) = (std::f32::MAX, None);
+
+    slice
+        .iter()
+        .fold(seed, |(t_max, hit), obj| {
+            if let Some(rec) = obj.hit(ray, NEAR..t_max) {
+                let hit_t = hit.as_ref().map(|h| h.t).unwrap_or(t_max);
+                if rec.t < hit_t {
+                    return (rec.t, Some(rec));
+                }
             }
-        }
-        hit
-    })
+            (t_max, hit)
+        })
+        .1
 }

@@ -18,7 +18,7 @@ pub fn color(world: &[Object], mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
     let mut strength = Vec3::from(1.);
     let mut bounces = 0;
 
-    while let Some(hit) = hit_slice(world, &ray, 0.001..std::f32::MAX) {
+    while let Some(hit) = hit_slice(world, &ray) {
         if bounces < 50 {
             if let Some((new_ray, attenuation)) = hit.material.scatter(&ray, &hit, rng) {
                 ray = new_ray;
