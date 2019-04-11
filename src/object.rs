@@ -30,8 +30,13 @@ impl Object {
     /// upper end of `t_range` starts out as infinity, we adjust it down as we
     /// find objects along `ray`. Once we've found an object at position `t`, we
     /// can ignore any objects at positions greater than `t`.
+    ///
+    /// This function returns a `HitRecord1`, which can be turned into a full
+    /// `HitRecord` by calling its `finish` method. (We don't return a full
+    /// `HitRecord` here because we may find hits on multiple objects, but we
+    /// only want to do all the work for the closest one.)
     #[inline]
-    pub fn hit<'m>(&'m self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord<'m>> {
+    pub fn hit<'o>(&'o self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord1<'o>> {
         // Since there's only one kind of object right now, we can simplify the
         // match:
         let Object::Sphere {
@@ -51,17 +56,48 @@ impl Object {
                 (-b + discriminant.sqrt()) / a,
             ] {
                 if t < t_range.end && t >= t_range.start {
-                    let p = ray.point_at_parameter(t);
-                    return Some(HitRecord {
+                    return Some(HitRecord1 {
                         t,
-                        p,
-                        normal: (p - *center) / *radius,
-                        material: &*material,
+                        object: self,
+                        material,
                     });
                 }
             }
         }
         None
+    }
+
+    /// Computes the surface normal at a given point. If the point is not on the
+    /// surface, the result will be bogus. However, this is only available
+    /// within this module, and we use it carefully.
+    #[inline]
+    fn normal_at(&self, p: Vec3) -> Vec3 {
+        let Object::Sphere { center, radius, .. } = self;
+        (p - *center) / *radius
+    }
+}
+
+/// Initial cheap ray-object intersection record, used before we've decided
+/// which object was actually hit.
+#[derive(Clone, Debug)]
+pub struct HitRecord1<'a> {
+    /// Position along the ray, expressed in distance from the origin.
+    t: f32,
+    /// Object that was hit.
+    object: &'a Object,
+    /// Material that was hit.
+    material: &'a Material,
+}
+
+impl<'o> HitRecord1<'o> {
+    pub fn finish(self, ray: &Ray) -> HitRecord<'o> {
+        let p = ray.point_at_parameter(self.t);
+        HitRecord {
+            t: self.t,
+            p,
+            normal: self.object.normal_at(p),
+            material: self.material,
+        }
     }
 }
 
@@ -86,7 +122,7 @@ pub struct HitRecord<'m> {
 pub fn hit_slice<'m>(slice: &'m [Object], ray: &Ray) -> Option<HitRecord<'m>> {
     const NEAR: f32 = 0.001;
 
-    let seed: (f32, Option<HitRecord<'m>>) = (std::f32::MAX, None);
+    let seed: (f32, Option<HitRecord1<'m>>) = (std::f32::MAX, None);
 
     slice
         .iter()
@@ -100,4 +136,5 @@ pub fn hit_slice<'m>(slice: &'m [Object], ray: &Ray) -> Option<HitRecord<'m>> {
             (t_max, hit)
         })
         .1
+        .map(|r| r.finish(ray))
 }
