@@ -1,5 +1,6 @@
 use rand::prelude::*;
 
+use rtiow::camera::Camera;
 use rtiow::vec3::Vec3;
 use rtiow::*;
 
