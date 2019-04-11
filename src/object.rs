@@ -122,19 +122,15 @@ pub struct HitRecord<'m> {
 pub fn hit_slice<'m>(slice: &'m [Object], ray: &Ray) -> Option<HitRecord<'m>> {
     const NEAR: f32 = 0.001;
 
-    let seed: (f32, Option<HitRecord1<'m>>) = (std::f32::MAX, None);
+    let mut nearest = std::f32::MAX;
+    let mut hit = None;
 
-    slice
-        .iter()
-        .fold(seed, |(t_max, hit), obj| {
-            if let Some(rec) = obj.hit(ray, NEAR..t_max) {
-                let hit_t = hit.as_ref().map(|h| h.t).unwrap_or(t_max);
-                if rec.t < hit_t {
-                    return (rec.t, Some(rec));
-                }
-            }
-            (t_max, hit)
-        })
-        .1
-        .map(|r| r.finish(ray))
+    for obj in slice {
+        if let Some(rec) = obj.hit(ray, NEAR..nearest) {
+            nearest = rec.t;
+            hit = Some(rec);
+        }
+    }
+
+    hit.map(|h| h.finish(ray))
 }
