@@ -5,9 +5,9 @@ use rtiow::vec3::Vec3;
 use rtiow::*;
 
 fn main() {
-    const NX: usize = 1200;
+    const NX: usize = 600;
     const NY: usize = 600;
-    const NS: usize = 100;
+    const NS: usize = 1000;
 
     let mut rng = rand::rngs::SmallRng::seed_from_u64(0xDEADBEEF);
 

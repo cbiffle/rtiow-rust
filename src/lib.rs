@@ -85,7 +85,7 @@ pub fn cornell_box() -> Vec<Object> {
             range0: 0. ..555.,
             range1: 0. ..555.,
             k: 555.,
-            material: white,
+            material: white.clone(),
         })),
         // right wall
         Object::Rect {
@@ -103,6 +103,18 @@ pub fn cornell_box() -> Vec<Object> {
             k: 555.,
             material: green,
         })),
+
+        object::rect_prism(Vec3(130., 0., 65.), Vec3(295., 165., 230.), white.clone()),
+        object::rect_prism(Vec3(265., 0., 295.), Vec3(430., 330., 460.), white),
+
+        Object::Sphere {
+            center: Vec3(212., 255., 147.),
+            radius: 82.,
+            material: Material::Dielectric {
+                ref_idx: 1.5,
+            },
+            motion: Vec3::default(),
+        },
     ]
 }
 

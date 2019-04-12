@@ -39,6 +39,7 @@ pub enum Object {
         material: Material,
     },
     FlipNormals(Box<Object>),
+    List(Vec<Object>),
 }
 
 impl Object {
@@ -121,6 +122,20 @@ impl Object {
             Object::FlipNormals(o) => o
                 .hit(ray, t_range)
                 .map(|h| HitRecord1 { object: self, ..h }),
+
+            Object::List(objs) => {
+                let mut t_range = t_range;
+                let mut hit = None;
+
+                for obj in objs {
+                    if let Some(rec) = obj.hit(ray, t_range.clone()) {
+                        t_range.end = rec.t;
+                        hit = Some(rec);
+                    }
+                }
+
+                hit
+            }
         }
     }
 
@@ -137,8 +152,58 @@ impl Object {
                 normal
             }
             Object::FlipNormals(o) => -o.normal_at(p),
+            Object::List(_) => unreachable!("uhhhhh"),
         }
     }
+}
+
+pub fn rect_prism(p0: Vec3, p1: Vec3, material: Material) -> Object {
+    Object::List(vec![
+        Object::Rect {
+            orthogonal_to: Z,
+            range0: p0[X]..p1[X],
+            range1: p0[Y]..p1[Y],
+            k: p1[Z],
+            material: material.clone(),
+        },
+        Object::FlipNormals(Box::new(Object::Rect {
+            orthogonal_to: Z,
+            range0: p0[X]..p1[X],
+            range1: p0[Y]..p1[Y],
+            k: p0[Z],
+            material: material.clone(),
+        })),
+
+        Object::Rect {
+            orthogonal_to: Y,
+            range0: p0[X]..p1[X],
+            range1: p0[Z]..p1[Z],
+            k: p1[Y],
+            material: material.clone(),
+        },
+        Object::FlipNormals(Box::new(Object::Rect {
+            orthogonal_to: Y,
+            range0: p0[X]..p1[X],
+            range1: p0[Z]..p1[Z],
+            k: p0[Y],
+            material: material.clone(),
+        })),
+
+        Object::Rect {
+            orthogonal_to: X,
+            range0: p0[Y]..p1[Y],
+            range1: p0[Z]..p1[Z],
+            k: p1[X],
+            material: material.clone(),
+        },
+        Object::FlipNormals(Box::new(Object::Rect {
+            orthogonal_to: X,
+            range0: p0[Y]..p1[Y],
+            range1: p0[Z]..p1[Z],
+            k: p0[X],
+            material: material.clone(),
+        })),
+    ])
 }
 
 /// Initial cheap ray-object intersection record, used before we've decided
