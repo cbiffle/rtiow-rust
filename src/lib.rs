@@ -13,7 +13,7 @@ use crate::camera::Camera;
 use crate::material::Material;
 use crate::object::{hit_slice, Object};
 use crate::ray::Ray;
-use crate::vec3::{Axis::*, Channel::*, *};
+use crate::vec3::{Channel::*, *};
 
 /// Computes the pixel color along `ray` for the scene of objects `world`.
 ///
@@ -38,10 +38,46 @@ pub fn color(world: &[Object], mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
         return Vec3::default();
     }
 
-    let unit_direction = ray.direction.into_unit();
-    let t = 0.5 * (unit_direction[Y] + 1.0);
-    let col = (1. - t) * Vec3::from(1.) + t * Vec3(0.5, 0.7, 1.0);
-    strength * col
+    Vec3::default()
+}
+
+pub fn simple_light() -> Vec<Object> {
+    vec![
+        Object::Sphere {
+            center: Vec3(0., -1000., 0.),
+            radius: 1000.,
+            material: Material::Lambertian {
+                albedo: texture::perlin(4.),
+            },
+            motion: Vec3::default(),
+        },
+        Object::Sphere {
+            center: Vec3(0., 2., 0.),
+            radius: 2.,
+            material: Material::Lambertian {
+                albedo: texture::perlin(4.),
+            },
+            motion: Vec3::default(),
+        },
+        Object::Sphere {
+            center: Vec3(0., 7., 0.),
+            radius: 2.,
+            material: Material::DiffuseLight {
+                emission: texture::constant(Vec3(1., 1., 1.)),
+                brightness: 4.,
+            },
+            motion: Vec3::default(),
+        },
+        Object::RectXY {
+            x_range: 3. .. 5.,
+            y_range: 1. .. 3.,
+            k: -2.,
+            material: Material::DiffuseLight {
+                emission: texture::constant(Vec3(1., 1., 1.)),
+                brightness: 4.,
+            },
+        },
+    ]
 }
 
 pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {

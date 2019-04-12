@@ -1,6 +1,8 @@
+use std::ops::Range;
+
 use crate::material::Material;
 use crate::ray::Ray;
-use crate::vec3::Vec3;
+use crate::vec3::{Axis::*, Vec3};
 
 /// An object in a scene.
 ///
@@ -17,6 +19,12 @@ pub enum Object {
         material: Material,
         /// Motion vector displacing sphere from `center` over time.
         motion: Vec3,
+    },
+    RectXY {
+        x_range: Range<f32>,
+        y_range: Range<f32>,
+        k: f32,
+        material: Material,
     },
 }
 
@@ -37,38 +45,61 @@ impl Object {
     /// `HitRecord` here because we may find hits on multiple objects, but we
     /// only want to do all the work for the closest one.)
     #[inline]
-    pub fn hit<'o>(&'o self, ray: &Ray, t_range: std::ops::Range<f32>) -> Option<HitRecord1<'o>> {
-        // Since there's only one kind of object right now, we can simplify the
-        // match:
-        let Object::Sphere {
-            center,
-            radius,
-            material,
-            motion,
-        } = self;
+    pub fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord1<'o>> {
+        match self {
+            Object::Sphere {
+                center,
+                radius,
+                material,
+                motion,
+            } => {
+                let center = ray.time * *motion + *center;
 
-        let center = ray.time * *motion + *center;
-
-        let oc = ray.origin - center;
-        let a = ray.direction.dot(ray.direction);
-        let b = oc.dot(ray.direction);
-        let c = oc.dot(oc) - radius * radius;
-        let discriminant = b * b - a * c;
-        if discriminant > 0. {
-            for &t in &[
-                (-b - discriminant.sqrt()) / a,
-                (-b + discriminant.sqrt()) / a,
-            ] {
-                if t < t_range.end && t >= t_range.start {
-                    return Some(HitRecord1 {
-                        t,
-                        object: self,
-                        material,
-                    });
+                let oc = ray.origin - center;
+                let a = ray.direction.dot(ray.direction);
+                let b = oc.dot(ray.direction);
+                let c = oc.dot(oc) - radius * radius;
+                let discriminant = b * b - a * c;
+                if discriminant > 0. {
+                    for &t in &[
+                        (-b - discriminant.sqrt()) / a,
+                        (-b + discriminant.sqrt()) / a,
+                    ] {
+                        if t < t_range.end && t >= t_range.start {
+                            return Some(HitRecord1 {
+                                t,
+                                object: self,
+                                material,
+                            });
+                        }
+                    }
                 }
+                None
+            }
+            Object::RectXY {
+                x_range,
+                y_range,
+                k,
+                material,
+            } => {
+                let t = (k - ray.origin[Z]) / ray.direction[Z];
+                if t < t_range.start || t >= t_range.end {
+                    return None;
+                }
+
+                let x = ray.origin[X] + t * ray.direction[X];
+                let y = ray.origin[Y] + t * ray.direction[Y];
+                if x < x_range.start || x >= x_range.end || y < y_range.start || y >= y_range.end {
+                    return None;
+                }
+
+                Some(HitRecord1 {
+                    t,
+                    object: self,
+                    material,
+                })
             }
         }
-        None
     }
 
     /// Computes the surface normal at a given point. If the point is not on the
@@ -76,8 +107,10 @@ impl Object {
     /// within this module, and we use it carefully.
     #[inline]
     fn normal_at(&self, p: Vec3) -> Vec3 {
-        let Object::Sphere { center, radius, .. } = self;
-        (p - *center) / *radius
+        match self {
+            Object::Sphere { center, radius, .. } => (p - *center) / *radius,
+            Object::RectXY { .. } => Vec3(0., 0., 1.),
+        }
     }
 }
 
