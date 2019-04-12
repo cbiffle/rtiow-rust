@@ -6,6 +6,7 @@ use crate::texture::Texture;
 use crate::vec3::{reflect, refract, Vec3};
 
 /// Material options for a rendered object.
+#[derive(Clone)]
 pub enum Material {
     /// An opaque material with a matte surface, where lighting is calculated
     /// using [Lambertian reflectance][lambert].
