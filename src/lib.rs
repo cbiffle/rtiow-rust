@@ -68,9 +68,10 @@ pub fn simple_light() -> Vec<Object> {
             },
             motion: Vec3::default(),
         },
-        Object::RectXY {
-            x_range: 3. .. 5.,
-            y_range: 1. .. 3.,
+        Object::Rect {
+            orthogonal_to: Axis::Z,
+            range0: 3. .. 5.,
+            range1: 1. .. 3.,
             k: -2.,
             material: Material::DiffuseLight {
                 emission: texture::constant(Vec3(1., 1., 1.)),

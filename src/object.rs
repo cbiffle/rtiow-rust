@@ -2,7 +2,18 @@ use std::ops::Range;
 
 use crate::material::Material;
 use crate::ray::Ray;
-use crate::vec3::{Axis::*, Vec3};
+use crate::vec3::{
+    Axis::{self, *},
+    Vec3,
+};
+
+fn other_axes(axis: Axis) -> (Axis, Axis) {
+    match axis {
+        Z => (X, Y),
+        X => (Y, Z),
+        Y => (X, Z),
+    }
+}
 
 /// An object in a scene.
 ///
@@ -20,9 +31,10 @@ pub enum Object {
         /// Motion vector displacing sphere from `center` over time.
         motion: Vec3,
     },
-    RectXY {
-        x_range: Range<f32>,
-        y_range: Range<f32>,
+    Rect {
+        orthogonal_to: Axis,
+        range0: Range<f32>,
+        range1: Range<f32>,
         k: f32,
         material: Material,
     },
@@ -76,20 +88,26 @@ impl Object {
                 }
                 None
             }
-            Object::RectXY {
-                x_range,
-                y_range,
+            Object::Rect {
+                orthogonal_to,
+                range0,
+                range1,
                 k,
                 material,
             } => {
-                let t = (k - ray.origin[Z]) / ray.direction[Z];
+                // The *_axis names are correct for orthogonal_to=Z. Use your
+                // imagination for the other cases.
+                let z_axis = *orthogonal_to;
+                let (x_axis, y_axis) = other_axes(z_axis);
+
+                let t = (k - ray.origin[z_axis]) / ray.direction[z_axis];
                 if t < t_range.start || t >= t_range.end {
                     return None;
                 }
 
-                let x = ray.origin[X] + t * ray.direction[X];
-                let y = ray.origin[Y] + t * ray.direction[Y];
-                if x < x_range.start || x >= x_range.end || y < y_range.start || y >= y_range.end {
+                let x = ray.origin[x_axis] + t * ray.direction[x_axis];
+                let y = ray.origin[y_axis] + t * ray.direction[y_axis];
+                if x < range0.start || x >= range0.end || y < range1.start || y >= range1.end {
                     return None;
                 }
 
@@ -109,7 +127,11 @@ impl Object {
     fn normal_at(&self, p: Vec3) -> Vec3 {
         match self {
             Object::Sphere { center, radius, .. } => (p - *center) / *radius,
-            Object::RectXY { .. } => Vec3(0., 0., 1.),
+            Object::Rect { orthogonal_to, .. } => {
+                let mut normal = Vec3::default();
+                normal[*orthogonal_to] = 1.;
+                normal
+            }
         }
     }
 }
