@@ -1,6 +1,8 @@
+mod aabb;
+pub mod bvh;
 pub mod camera;
-mod material;
-mod object;
+pub mod material;
+pub mod object;
 mod perlin;
 pub mod ray;
 pub mod texture;
@@ -11,19 +13,53 @@ use rayon::prelude::*;
 
 use crate::camera::Camera;
 use crate::material::Material;
-use crate::object::{hit_slice, Object};
+use crate::object::Object;
 use crate::ray::Ray;
 use crate::vec3::{Axis::*, Channel::*, *};
+
+pub trait World: Send + Sync {
+    fn hit_top<'a>(&'a self, ray: &Ray) -> Option<object::HitRecord<'a>>;
+}
+
+impl<'r, T: World + ?Sized> World for &'r T {
+    fn hit_top<'a>(&'a self, ray: &Ray) -> Option<object::HitRecord<'a>> {
+        (*self).hit_top(ray)
+    }
+}
+
+impl World for [Object] {
+    fn hit_top<'a>(&'a self, ray: &Ray) -> Option<object::HitRecord<'a>> {
+        const NEAR: f32 = 0.001;
+
+        let mut nearest = std::f32::MAX;
+        let mut hit = None;
+
+        for obj in self {
+            if let Some(rec) = obj.hit(ray, NEAR..nearest) {
+                nearest = rec.t;
+                hit = Some(rec);
+            }
+        }
+
+        hit.map(|h| h.finish(ray))
+    }
+}
+
+impl World for bvh::Bvh {
+    fn hit_top<'a>(&'a self, ray: &Ray) -> Option<object::HitRecord<'a>> {
+        self.hit(ray, 0.001..std::f32::MAX).map(|h| h.finish(ray))
+    }
+}
 
 /// Computes the pixel color along `ray` for the scene of objects `world`.
 ///
 /// This is the actual ray-tracing routine.
-pub fn color(world: &[Object], mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
+pub fn color(world: &impl World, mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
     let mut strength = Vec3::from(1.);
     let mut emitted = Vec3::default();
     let mut bounces = 0;
 
-    while let Some(hit) = hit_slice(world, &ray) {
+    while let Some(hit) = world.hit_top(&ray) {
         if bounces < 50 {
             if let Some((new_ray, attenuation)) = hit.material.scatter(&ray, &hit, rng) {
                 ray = new_ray;
@@ -55,7 +91,7 @@ pub fn cornell_box() -> Vec<Object> {
         emission: texture::constant(Vec3::from(1.)),
         brightness: 15.,
     };
-    vec![
+    let mut scene = vec![
         Object::Rect {
             orthogonal_to: Y,
             range0: 213. ..343.,
@@ -103,19 +139,90 @@ pub fn cornell_box() -> Vec<Object> {
             k: 555.,
             material: green,
         })),
+    ];
+    scene
+}
 
-        object::rect_prism(Vec3(130., 0., 65.), Vec3(295., 165., 230.), white.clone()),
-        object::rect_prism(Vec3(265., 0., 295.), Vec3(430., 330., 460.), white),
+pub fn cornell_box_with_boxes() -> Vec<Object> {
+    fn diffuse_color(c: Vec3) -> Material {
+        Material::Lambertian {
+            albedo: texture::constant(c),
+        }
+    }
 
+    let red = diffuse_color(Vec3(0.65, 0.05, 0.05));
+    let white = diffuse_color(Vec3::from(0.73));
+    let green = diffuse_color(Vec3(0.12, 0.45, 0.15));
+    let light = Material::DiffuseLight {
+        emission: texture::constant(Vec3::from(1.)),
+        brightness: 15.,
+    };
+    let mut scene = vec![
+        Object::Rect {
+            orthogonal_to: Y,
+            range0: 213. ..343.,
+            range1: 227. ..332.,
+            k: 554.,
+            material: light,
+        },
+        // floor
+        Object::Rect {
+            orthogonal_to: Y,
+            range0: 0. ..555.,
+            range1: 0. ..555.,
+            k: 0.,
+            material: white.clone(),
+        },
+        // rear wall
+        Object::FlipNormals(Box::new(Object::Rect {
+            orthogonal_to: Z,
+            range0: 0. ..555.,
+            range1: 0. ..555.,
+            k: 555.,
+            material: white.clone(),
+        })),
+        // ceiling
+        Object::FlipNormals(Box::new(Object::Rect {
+            orthogonal_to: Y,
+            range0: 0. ..555.,
+            range1: 0. ..555.,
+            k: 555.,
+            material: white.clone(),
+        })),
+        // right wall
+        Object::Rect {
+            orthogonal_to: X,
+            range0: 0. ..555.,
+            range1: 0. ..555.,
+            k: 0.,
+            material: red,
+        },
+        // left wall
+        Object::FlipNormals(Box::new(Object::Rect {
+            orthogonal_to: X,
+            range0: 0. ..555.,
+            range1: 0. ..555.,
+            k: 555.,
+            material: green,
+        })),
         Object::Sphere {
             center: Vec3(212., 255., 147.),
             radius: 82.,
-            material: Material::Dielectric {
-                ref_idx: 1.5,
-            },
+            material: Material::Dielectric { ref_idx: 1.5 },
             motion: Vec3::default(),
         },
-    ]
+    ];
+    scene.extend(object::rect_prism(
+        Vec3(130., 0., 65.),
+        Vec3(295., 165., 230.),
+        white.clone(),
+    ));
+    scene.extend(object::rect_prism(
+        Vec3(265., 0., 295.),
+        Vec3(430., 330., 460.),
+        white,
+    ));
+    scene
 }
 
 pub fn simple_light() -> Vec<Object> {
@@ -282,7 +389,7 @@ pub fn print_ppm(image: Image) {
     }
 }
 
-pub fn par_cast(nx: usize, ny: usize, ns: usize, camera: &Camera, world: &[Object]) -> Image {
+pub fn par_cast(nx: usize, ny: usize, ns: usize, camera: &Camera, world: impl World) -> Image {
     Image::par_compute(nx, ny, |x, y| {
         let col: Vec3 = (0..ns)
             .map(|_| {
@@ -302,7 +409,7 @@ pub fn cast(
     ny: usize,
     ns: usize,
     camera: &Camera,
-    world: &[Object],
+    world: impl World,
     rng: &mut impl Rng,
 ) -> Image {
     Image::compute(nx, ny, |x, y| {

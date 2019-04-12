@@ -1,4 +1,3 @@
-
 use rand::prelude::*;
 
 /// A three-vector of floats, used as a color, coordinate, etc.
@@ -77,6 +76,20 @@ impl Vec3 {
     #[inline]
     pub fn zip_with(self, other: Vec3, mut f: impl FnMut(f32, f32) -> f32) -> Self {
         Vec3(f(self.0, other.0), f(self.1, other.1), f(self.2, other.2))
+    }
+
+    #[inline]
+    pub fn zip_with3(
+        self,
+        other1: Vec3,
+        other2: Vec3,
+        mut f: impl FnMut(f32, f32, f32) -> f32,
+    ) -> Self {
+        Vec3(
+            f(self.0, other1.0, other2.0),
+            f(self.1, other1.1, other2.1),
+            f(self.2, other1.2, other2.2),
+        )
     }
 
     /// Combines the elements of `self` using `f` until only one result remains.
