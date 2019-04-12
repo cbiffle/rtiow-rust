@@ -20,12 +20,20 @@ pub enum BvhContents {
 }
 
 impl Bvh {
-    pub fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord1<'o>> {
+    pub fn hit<'o>(&'o self, ray: &Ray, mut t_range: Range<f32>) -> Option<HitRecord1<'o>> {
         if self.bounding_box.hit(ray, t_range.clone()) {
             match &self.contents {
                 BvhContents::Node { left, right } => {
                     let hit_left = left.hit(ray, t_range.clone());
+
+                    // Don't bother searching past the left hit in the right
+                    // space.
+                    if let Some(h) = &hit_left {
+                        t_range.end = h.t;
+                    }
+
                     let hit_right = right.hit(ray, t_range);
+
                     match (hit_left, hit_right) {
                         (h, None) | (None, h) => h,
                         (Some(hl), Some(hr)) => {
