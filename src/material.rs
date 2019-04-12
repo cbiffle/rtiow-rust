@@ -34,6 +34,8 @@ pub enum Material {
     },
     /// Diffuse light.
     DiffuseLight { emission: Texture, brightness: f32 },
+    /// Isotropic scattering.
+    Isotropic { albedo: Texture },
 }
 
 impl Material {
@@ -102,6 +104,14 @@ impl Material {
                 Some((ray, attenuation))
             }
             Material::DiffuseLight { .. } => None,
+            Material::Isotropic { albedo } => Some((
+                Ray {
+                    origin: hit.p,
+                    direction: Vec3::in_unit_sphere(rng),
+                    ..*ray
+                },
+                albedo(hit.p),
+            )),
         }
     }
 
