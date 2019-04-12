@@ -15,6 +15,7 @@ pub struct Vec3(pub f32, pub f32, pub f32);
 impl Vec3 {
     /// Generates a random `Vec3` inside a sphere with unit radius. The length
     /// of the result is between 0 and 1.
+    #[inline]
     pub fn in_unit_sphere(rng: &mut impl Rng) -> Self {
         loop {
             let v = 2. * rng.gen::<Vec3>() - Vec3::from(1.);
@@ -27,6 +28,7 @@ impl Vec3 {
     /// Generates a random `Vec3` inside a disc with unit radius in the XY
     /// plane. The length of the result is between 0 and 1, and the Z component
     /// is 0.
+    #[inline]
     pub fn in_unit_disc(rng: &mut impl Rng) -> Self {
         loop {
             let v = 2. * Vec3(rng.gen(), rng.gen(), 0.) - Vec3(1., 1., 0.);
@@ -60,6 +62,7 @@ impl Vec3 {
 
     /// Produces a vector collinear with `self` but with unit length. That is,
     /// the result points the same direction as `self` relative to the origin.
+    #[inline]
     pub fn into_unit(self) -> Self {
         self / self.length()
     }
@@ -228,6 +231,7 @@ use Channel::*;
 impl ::std::ops::Index<Channel> for Vec3 {
     type Output = f32;
 
+    #[inline]
     fn index(&self, idx: Channel) -> &Self::Output {
         match idx {
             R => &self.0,
@@ -238,6 +242,7 @@ impl ::std::ops::Index<Channel> for Vec3 {
 }
 
 impl ::std::ops::IndexMut<Channel> for Vec3 {
+    #[inline]
     fn index_mut(&mut self, idx: Channel) -> &mut Self::Output {
         match idx {
             R => &mut self.0,
@@ -272,6 +277,7 @@ use Axis::*;
 impl ::std::ops::Index<Axis> for Vec3 {
     type Output = f32;
 
+    #[inline]
     fn index(&self, idx: Axis) -> &Self::Output {
         match idx {
             X => &self.0,
@@ -282,6 +288,7 @@ impl ::std::ops::Index<Axis> for Vec3 {
 }
 
 impl ::std::ops::IndexMut<Axis> for Vec3 {
+    #[inline]
     fn index_mut(&mut self, idx: Axis) -> &mut Self::Output {
         match idx {
             X => &mut self.0,
@@ -292,6 +299,7 @@ impl ::std::ops::IndexMut<Axis> for Vec3 {
 }
 
 /// Reflects a vector `v` around a surface normal `n`.
+#[inline]
 pub fn reflect(v: Vec3, n: Vec3) -> Vec3 {
     v - 2. * v.dot(n) * n
 }
@@ -299,6 +307,7 @@ pub fn reflect(v: Vec3, n: Vec3) -> Vec3 {
 /// Refracts `v` into a material with surface normal `n`. `ni_over_nt` is the
 /// refractive index if the ray is exiting the material, or its reciprocal if
 /// it's entering.
+#[inline]
 pub fn refract(v: Vec3, n: Vec3, ni_over_nt: f32) -> Option<Vec3> {
     let uv = v.into_unit();
     let dt = uv.dot(n);
