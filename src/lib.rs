@@ -13,7 +13,7 @@ use crate::camera::Camera;
 use crate::material::Material;
 use crate::object::{hit_slice, Object};
 use crate::ray::Ray;
-use crate::vec3::{Channel::*, *};
+use crate::vec3::{Axis::*, Channel::*, *};
 
 /// Computes the pixel color along `ray` for the scene of objects `world`.
 ///
@@ -39,6 +39,71 @@ pub fn color(world: &[Object], mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
     }
 
     Vec3::default()
+}
+
+pub fn cornell_box() -> Vec<Object> {
+    fn diffuse_color(c: Vec3) -> Material {
+        Material::Lambertian {
+            albedo: texture::constant(c),
+        }
+    }
+
+    let red = diffuse_color(Vec3(0.65, 0.05, 0.05));
+    let white = diffuse_color(Vec3::from(0.73));
+    let green = diffuse_color(Vec3(0.12, 0.45, 0.15));
+    let light = Material::DiffuseLight {
+        emission: texture::constant(Vec3::from(1.)),
+        brightness: 15.,
+    };
+    vec![
+        Object::Rect {
+            orthogonal_to: Y,
+            range0: 213. ..343.,
+            range1: 227. ..332.,
+            k: 554.,
+            material: light,
+        },
+        // floor
+        Object::Rect {
+            orthogonal_to: Y,
+            range0: 0. ..555.,
+            range1: 0. ..555.,
+            k: 0.,
+            material: white.clone(),
+        },
+        // rear wall
+        Object::FlipNormals(Box::new(Object::Rect {
+            orthogonal_to: Z,
+            range0: 0. ..555.,
+            range1: 0. ..555.,
+            k: 555.,
+            material: white.clone(),
+        })),
+        // ceiling
+        Object::FlipNormals(Box::new(Object::Rect {
+            orthogonal_to: Y,
+            range0: 0. ..555.,
+            range1: 0. ..555.,
+            k: 555.,
+            material: white,
+        })),
+        // right wall
+        Object::Rect {
+            orthogonal_to: X,
+            range0: 0. ..555.,
+            range1: 0. ..555.,
+            k: 0.,
+            material: red,
+        },
+        // left wall
+        Object::FlipNormals(Box::new(Object::Rect {
+            orthogonal_to: X,
+            range0: 0. ..555.,
+            range1: 0. ..555.,
+            k: 555.,
+            material: green,
+        })),
+    ]
 }
 
 pub fn simple_light() -> Vec<Object> {
@@ -70,8 +135,8 @@ pub fn simple_light() -> Vec<Object> {
         },
         Object::Rect {
             orthogonal_to: Axis::Z,
-            range0: 3. .. 5.,
-            range1: 1. .. 3.,
+            range0: 3. ..5.,
+            range1: 1. ..3.,
             k: -2.,
             material: Material::DiffuseLight {
                 emission: texture::constant(Vec3(1., 1., 1.)),

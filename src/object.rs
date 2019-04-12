@@ -38,6 +38,7 @@ pub enum Object {
         k: f32,
         material: Material,
     },
+    FlipNormals(Box<Object>),
 }
 
 impl Object {
@@ -117,6 +118,9 @@ impl Object {
                     material,
                 })
             }
+            Object::FlipNormals(o) => o
+                .hit(ray, t_range)
+                .map(|h| HitRecord1 { object: self, ..h }),
         }
     }
 
@@ -132,6 +136,7 @@ impl Object {
                 normal[*orthogonal_to] = 1.;
                 normal
             }
+            Object::FlipNormals(o) => -o.normal_at(p),
         }
     }
 }
