@@ -41,6 +41,15 @@ pub enum Object {
         material: Material,
     },
     FlipNormals(Box<Object>),
+    Translate {
+        offset: Vec3,
+        object: Box<Object>,
+    },
+    RotateY {
+        object: Box<Object>,
+        sin_theta: f32,
+        cos_theta: f32,
+    },
 }
 
 impl Object {
@@ -124,6 +133,31 @@ impl Object {
             Object::FlipNormals(o) => o
                 .hit(ray, t_range)
                 .map(|h| HitRecord { normal: -h.normal, ..h }),
+            Object::Translate { offset, object } => {
+                let t_ray = Ray { origin: ray.origin - *offset, ..*ray };
+                object.hit(&t_ray, t_range).map(|hit| HitRecord { p: hit.p + *offset, ..hit })
+            },
+            Object::RotateY { object, sin_theta, cos_theta } => {
+                fn rot(p: Vec3, sin_theta: f32, cos_theta: f32) -> Vec3 {
+                    Vec3(
+                        p.dot(Vec3(cos_theta, 0., -sin_theta)),
+                        p.dot(Vec3(0., 1., 0.)),
+                        p.dot(Vec3(sin_theta, 0., cos_theta)),
+                    )
+                }
+
+                let rot_ray = Ray {
+                    origin: rot(ray.origin, *sin_theta, *cos_theta),
+                    direction: rot(ray.direction, *sin_theta, *cos_theta),
+                    ..*ray
+                };
+
+                object.hit(&rot_ray, t_range).map(|hit| HitRecord {
+                    p: rot(hit.p, -*sin_theta, *cos_theta),
+                    normal: rot(hit.normal, -*sin_theta, *cos_theta),
+                    ..hit
+                })
+            },
         }
     }
 
@@ -171,6 +205,28 @@ impl Object {
                 Aabb { min, max }
             }
             Object::FlipNormals(o) => o.bounding_box(exposure),
+            Object::Translate { offset, object } => {
+                let b = object.bounding_box(exposure);
+                Aabb {
+                    min: b.min + *offset,
+                    max: b.max + *offset,
+                }
+            },
+            Object::RotateY { object, sin_theta, cos_theta } => {
+                fn rot(p: Vec3, sin_theta: f32, cos_theta: f32) -> Vec3 {
+                    Vec3(
+                        p.dot(Vec3(cos_theta, 0., -sin_theta)),
+                        p.dot(Vec3(0., 1., 0.)),
+                        p.dot(Vec3(sin_theta, 0., cos_theta)),
+                    )
+                }
+
+                let (min, max) = object.bounding_box(exposure).corners().fold((Vec3::from(std::f32::MAX), Vec3::from(std::f32::MIN)), |(min, max), c| {
+                    let rot_c = rot(c, -*sin_theta, *cos_theta);
+                    (min.zip_with(rot_c, f32::max), max.zip_with(rot_c, f32::min))
+                });
+                Aabb { min, max }
+            },
         }
     }
 }

@@ -27,4 +27,12 @@ impl Aabb {
         let end = t_range.end.min(t1.reduce(f32::min));
         end > start
     }
+
+    pub fn corners<'s>(&'s self) -> impl Iterator<Item = Vec3> + 's {
+        (0..2).flat_map(move |x| (0..2).flat_map(move |y| (0..2).map(move |z| Vec3(
+                        if x == 0 { self.min.0 } else { self.max.0 },
+                        if y == 0 { self.min.1 } else { self.max.1 },
+                        if z == 0 { self.min.2 } else { self.max.2 },
+                        ))))
+    }
 }
