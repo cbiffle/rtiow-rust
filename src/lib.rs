@@ -41,13 +41,13 @@ impl World for [Object] {
             }
         }
 
-        hit.map(|h| h.finish(ray))
+        hit
     }
 }
 
 impl World for bvh::Bvh {
     fn hit_top<'a>(&'a self, ray: &Ray) -> Option<object::HitRecord<'a>> {
-        self.hit(ray, 0.001..std::f32::MAX).map(|h| h.finish(ray))
+        self.hit(ray, 0.001..std::f32::MAX)
     }
 }
 
