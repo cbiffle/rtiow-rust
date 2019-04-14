@@ -243,7 +243,7 @@ fn book_final_scene(
             radius: 50.,
             material: Material::Metal {
                 albedo: Vec3(0.8, 0.8, 0.9),
-                fuzz: 10.,
+                fuzz: 1.,
             },
         },
     }));

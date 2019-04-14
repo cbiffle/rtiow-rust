@@ -68,8 +68,6 @@ pub fn color(world: &impl World, mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
     // 2. The ray reaches a surface that does not scatter.
     // 3. The ray bounces more than 50 times.
     while let Some(hit) = world.hit_top(&ray, rng) {
-        if bounces == 50 { break }
-        bounces += 1;
 
         // Record this hit's contribution, attenuated by the total attenuation
         // so far.
@@ -89,6 +87,10 @@ pub fn color(world: &impl World, mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
             // Locally absorbed; we're done.
             return accum
         }
+
+        if bounces == 50 { return accum }
+
+        bounces += 1;
     }
 
     Vec3::default()
