@@ -214,21 +214,21 @@ impl<T: Object> Object for RotateY<T> {
     fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
         fn rot(p: Vec3, sin_theta: f32, cos_theta: f32) -> Vec3 {
             Vec3(
-                p.dot(Vec3(cos_theta, 0., -sin_theta)),
+                p.dot(Vec3(cos_theta, 0., sin_theta)),
                 p.dot(Vec3(0., 1., 0.)),
-                p.dot(Vec3(sin_theta, 0., cos_theta)),
+                p.dot(Vec3(-sin_theta, 0., cos_theta)),
             )
         }
 
         let rot_ray = Ray {
-            origin: rot(ray.origin, self.sin_theta, self.cos_theta),
-            direction: rot(ray.direction, self.sin_theta, self.cos_theta),
+            origin: rot(ray.origin, -self.sin_theta, self.cos_theta),
+            direction: rot(ray.direction, -self.sin_theta, self.cos_theta),
             ..*ray
         };
 
         self.object.hit(&rot_ray, t_range).map(|hit| HitRecord {
-            p: rot(hit.p, -self.sin_theta, self.cos_theta),
-            normal: rot(hit.normal, -self.sin_theta, self.cos_theta),
+            p: rot(hit.p, self.sin_theta, self.cos_theta),
+            normal: rot(hit.normal, self.sin_theta, self.cos_theta),
             ..hit
         })
     }
@@ -236,17 +236,17 @@ impl<T: Object> Object for RotateY<T> {
     fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
         fn rot(p: Vec3, sin_theta: f32, cos_theta: f32) -> Vec3 {
             Vec3(
-                p.dot(Vec3(cos_theta, 0., -sin_theta)),
+                p.dot(Vec3(cos_theta, 0., sin_theta)),
                 p.dot(Vec3(0., 1., 0.)),
-                p.dot(Vec3(sin_theta, 0., cos_theta)),
+                p.dot(Vec3(-sin_theta, 0., cos_theta)),
             )
         }
 
         let (min, max) = self.object.bounding_box(exposure).corners().fold(
             (Vec3::from(std::f32::MAX), Vec3::from(std::f32::MIN)),
             |(min, max), c| {
-                let rot_c = rot(c, -self.sin_theta, self.cos_theta);
-                (min.zip_with(rot_c, f32::max), max.zip_with(rot_c, f32::min))
+                let rot_c = rot(c, self.sin_theta, self.cos_theta);
+                (min.zip_with(rot_c, f32::min), max.zip_with(rot_c, f32::max))
             },
         );
         Aabb { min, max }
@@ -366,4 +366,13 @@ pub struct HitRecord<'m> {
     pub normal: Vec3,
     /// Material of the object at the hit position.
     pub material: &'m Material,
+}
+
+pub fn rotate_y<O: Object>(degrees: f32, object: O) -> RotateY<O> {
+    let radians = degrees * std::f32::consts::PI / 180.;
+    RotateY {
+        object,
+        sin_theta: radians.sin(),
+        cos_theta: radians.cos(),
+    }
 }
