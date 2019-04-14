@@ -64,6 +64,23 @@ pub trait Object: std::fmt::Debug + Sync + Send {
     fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb;
 }
 
+/// A description of a `Ray` hitting an `Object`. This stores information needed
+/// for rendering later.
+///
+/// The `'m` lifetime refers to the `Material` of the `Object`, which we capture
+/// by reference. Thus, a `HitRecord` cannot outlive the `Object` it refers to.
+#[derive(Clone)]
+pub struct HitRecord<'m> {
+    /// Position along the ray, expressed in distance from the origin.
+    pub t: f32,
+    /// Position along the ray, as an actual point.
+    pub p: Vec3,
+    /// Surface normal of the object at the hit position.
+    pub normal: Vec3,
+    /// Material of the object at the hit position.
+    pub material: &'m Material,
+}
+
 /// A sphere.
 #[derive(Debug)]
 pub struct Sphere {
@@ -370,23 +387,6 @@ pub fn rect_prism(p0: Vec3, p1: Vec3, material: Material) -> impl Object {
             ),
         ),
     )
-}
-
-/// A description of a `Ray` hitting an `Object`. This stores information needed
-/// for rendering later.
-///
-/// The `'m` lifetime refers to the `Material` of the `Object`, which we capture
-/// by reference. Thus, a `HitRecord` cannot outlive the `Object` it refers to.
-#[derive(Clone)]
-pub struct HitRecord<'m> {
-    /// Position along the ray, expressed in distance from the origin.
-    pub t: f32,
-    /// Position along the ray, as an actual point.
-    pub p: Vec3,
-    /// Surface normal of the object at the hit position.
-    pub normal: Vec3,
-    /// Material of the object at the hit position.
-    pub material: &'m Material,
 }
 
 pub fn rotate_y<O: Object>(degrees: f32, object: O) -> RotateY<O> {
