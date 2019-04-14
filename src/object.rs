@@ -20,39 +20,7 @@ fn other_axes(axis: Axis) -> (Axis, Axis) {
 ///
 /// The primary purpose of an `Object` is to interact with rays of light using
 /// the `hit` method.
-#[derive(Debug)]
-pub enum Object {
-    /// A sphere.
-    Sphere {
-        /// Center point of the sphere.
-        center: Vec3,
-        /// Radius of the sphere.
-        radius: f32,
-        /// Material of the sphere.
-        material: Material,
-        /// Motion vector displacing sphere from `center` over time.
-        motion: Vec3,
-    },
-    Rect {
-        orthogonal_to: Axis,
-        range0: Range<f32>,
-        range1: Range<f32>,
-        k: f32,
-        material: Material,
-    },
-    FlipNormals(Box<Object>),
-    Translate {
-        offset: Vec3,
-        object: Box<Object>,
-    },
-    RotateY {
-        object: Box<Object>,
-        sin_theta: f32,
-        cos_theta: f32,
-    },
-}
-
-impl Object {
+pub trait Object: std::fmt::Debug + Sync + Send {
     /// Tests if `ray` intersects the object `self`, and if so, if that
     /// intersection occurs within `t_range` along the ray. (Recall that `Ray`
     /// is defined in terms of a `t` value that refers to points along the ray.)
@@ -63,219 +31,324 @@ impl Object {
     /// upper end of `t_range` starts out as infinity, we adjust it down as we
     /// find objects along `ray`. Once we've found an object at position `t`, we
     /// can ignore any objects at positions greater than `t`.
+    fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>>;
+
+    /// Computes the bounding box for the object at the given range of times.
+    /// This is called during scene setup, not rendering, and so it may be
+    /// expensive.
+    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb;
+}
+
+/// A sphere.
+#[derive(Debug)]
+pub struct Sphere {
+    /// Radius of the sphere.
+    pub radius: f32,
+    /// Material of the sphere.
+    pub material: Material,
+    /// Motion vector displacing sphere from the origin over time.
+    pub motion: Vec3,
+}
+
+impl Object for Sphere {
     #[inline]
-    pub fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
-        match self {
-            Object::Sphere {
-                center,
-                radius,
-                material,
-                motion,
-            } => {
-                let t_center = ray.time * *motion + *center;
+    fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
+        let t_center = ray.time * self.motion;
 
-                let oc = ray.origin - t_center;
-                let a = ray.direction.dot(ray.direction);
-                let b = oc.dot(ray.direction);
-                let c = oc.dot(oc) - radius * radius;
-                let discriminant = b * b - a * c;
-                if discriminant > 0. {
-                    for &t in &[
-                        (-b - discriminant.sqrt()) / a,
-                        (-b + discriminant.sqrt()) / a,
-                    ] {
-                        if t < t_range.end && t >= t_range.start {
-                            let p = ray.point_at_parameter(t);
-                            return Some(HitRecord {
-                                t,
-                                p,
-                                normal: (p - *center) / *radius,
-                                material,
-                            });
-                        }
-                    }
+        let oc = ray.origin - t_center;
+        let a = ray.direction.dot(ray.direction);
+        let b = oc.dot(ray.direction);
+        let c = oc.dot(oc) - self.radius * self.radius;
+        let discriminant = b * b - a * c;
+        if discriminant > 0. {
+            for &t in &[
+                (-b - discriminant.sqrt()) / a,
+                (-b + discriminant.sqrt()) / a,
+            ] {
+                if t < t_range.end && t >= t_range.start {
+                    let p = ray.point_at_parameter(t);
+                    return Some(HitRecord {
+                        t,
+                        p,
+                        normal: p / self.radius,
+                        material: &self.material,
+                    });
                 }
-                None
             }
-            Object::Rect {
-                orthogonal_to,
-                range0,
-                range1,
-                k,
-                material,
-            } => {
-                // The *_axis names are correct for orthogonal_to=Z. Use your
-                // imagination for the other cases.
-                let z_axis = *orthogonal_to;
-                let (x_axis, y_axis) = other_axes(z_axis);
-
-                let t = (k - ray.origin[z_axis]) / ray.direction[z_axis];
-                if t < t_range.start || t >= t_range.end {
-                    return None;
-                }
-
-                let x = ray.origin[x_axis] + t * ray.direction[x_axis];
-                let y = ray.origin[y_axis] + t * ray.direction[y_axis];
-                if x < range0.start || x >= range0.end || y < range1.start || y >= range1.end {
-                    return None;
-                }
-
-                let p = ray.point_at_parameter(t);
-                let mut normal = Vec3::default();
-                normal[*orthogonal_to] = 1.;
-                Some(HitRecord {
-                    t,
-                    p,
-                    material,
-                    normal,
-                })
-            }
-            Object::FlipNormals(o) => o
-                .hit(ray, t_range)
-                .map(|h| HitRecord { normal: -h.normal, ..h }),
-            Object::Translate { offset, object } => {
-                let t_ray = Ray { origin: ray.origin - *offset, ..*ray };
-                object.hit(&t_ray, t_range).map(|hit| HitRecord { p: hit.p + *offset, ..hit })
-            },
-            Object::RotateY { object, sin_theta, cos_theta } => {
-                fn rot(p: Vec3, sin_theta: f32, cos_theta: f32) -> Vec3 {
-                    Vec3(
-                        p.dot(Vec3(cos_theta, 0., -sin_theta)),
-                        p.dot(Vec3(0., 1., 0.)),
-                        p.dot(Vec3(sin_theta, 0., cos_theta)),
-                    )
-                }
-
-                let rot_ray = Ray {
-                    origin: rot(ray.origin, *sin_theta, *cos_theta),
-                    direction: rot(ray.direction, *sin_theta, *cos_theta),
-                    ..*ray
-                };
-
-                object.hit(&rot_ray, t_range).map(|hit| HitRecord {
-                    p: rot(hit.p, -*sin_theta, *cos_theta),
-                    normal: rot(hit.normal, -*sin_theta, *cos_theta),
-                    ..hit
-                })
-            },
         }
+        None
     }
 
-    pub fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
-        match self {
-            Object::Sphere {
-                center,
-                radius,
-                motion,
-                ..
-            } => {
-                let p1 = *center + exposure.start * *motion;
-                let bb1 = Aabb {
-                    min: p1 - Vec3::from(*radius),
-                    max: p1 + Vec3::from(*radius),
-                };
-                let p2 = *center + exposure.end * *motion;
-                let bb2 = Aabb {
-                    min: p2 - Vec3::from(*radius),
-                    max: p2 + Vec3::from(*radius),
-                };
+    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+        let p1 = exposure.start * self.motion;
+        let bb1 = Aabb {
+            min: p1 - Vec3::from(self.radius),
+            max: p1 + Vec3::from(self.radius),
+        };
+        let p2 = exposure.end * self.motion;
+        let bb2 = Aabb {
+            min: p2 - Vec3::from(self.radius),
+            max: p2 + Vec3::from(self.radius),
+        };
 
-                bb1.merge(bb2)
-            }
-            Object::Rect {
-                orthogonal_to,
-                k,
-                range0,
-                range1,
-                ..
-            } => {
-                let mut min = Vec3::default();
-                let mut max = Vec3::default();
-                let z_axis = *orthogonal_to;
-                let (x_axis, y_axis) = other_axes(z_axis);
+        bb1.merge(bb2)
+    }
+}
 
-                // TODO: this uses epsilon fudge factors and I hate it
-                min[z_axis] = *k - 0.0001;
-                max[z_axis] = *k + 0.0001;
-                min[x_axis] = range0.start;
-                max[x_axis] = range0.end;
-                min[y_axis] = range1.start;
-                max[y_axis] = range1.end;
+#[derive(Debug)]
+pub struct Rect {
+    pub orthogonal_to: Axis,
+    pub range0: Range<f32>,
+    pub range1: Range<f32>,
+    // TODO: replace with Translate?
+    pub k: f32,
+    pub material: Material,
+}
 
-                Aabb { min, max }
-            }
-            Object::FlipNormals(o) => o.bounding_box(exposure),
-            Object::Translate { offset, object } => {
-                let b = object.bounding_box(exposure);
-                Aabb {
-                    min: b.min + *offset,
-                    max: b.max + *offset,
-                }
-            },
-            Object::RotateY { object, sin_theta, cos_theta } => {
-                fn rot(p: Vec3, sin_theta: f32, cos_theta: f32) -> Vec3 {
-                    Vec3(
-                        p.dot(Vec3(cos_theta, 0., -sin_theta)),
-                        p.dot(Vec3(0., 1., 0.)),
-                        p.dot(Vec3(sin_theta, 0., cos_theta)),
-                    )
-                }
+impl Object for Rect {
+    #[inline]
+    fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
+        // The *_axis names are correct for orthogonal_to=Z. Use your
+        // imagination for the other cases.
+        let z_axis = self.orthogonal_to;
+        let (x_axis, y_axis) = other_axes(z_axis);
 
-                let (min, max) = object.bounding_box(exposure).corners().fold((Vec3::from(std::f32::MAX), Vec3::from(std::f32::MIN)), |(min, max), c| {
-                    let rot_c = rot(c, -*sin_theta, *cos_theta);
-                    (min.zip_with(rot_c, f32::max), max.zip_with(rot_c, f32::min))
-                });
-                Aabb { min, max }
-            },
+        let t = (self.k - ray.origin[z_axis]) / ray.direction[z_axis];
+        if t < t_range.start || t >= t_range.end {
+            return None;
+        }
+
+        let x = ray.origin[x_axis] + t * ray.direction[x_axis];
+        let y = ray.origin[y_axis] + t * ray.direction[y_axis];
+        if x < self.range0.start
+            || x >= self.range0.end
+            || y < self.range1.start
+            || y >= self.range1.end
+        {
+            return None;
+        }
+
+        let p = ray.point_at_parameter(t);
+        let mut normal = Vec3::default();
+        normal[z_axis] = 1.;
+        Some(HitRecord {
+            t,
+            p,
+            material: &self.material,
+            normal,
+        })
+    }
+
+    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+        let mut min = Vec3::default();
+        let mut max = Vec3::default();
+        let z_axis = self.orthogonal_to;
+        let (x_axis, y_axis) = other_axes(z_axis);
+
+        // TODO: this uses epsilon fudge factors and I hate it
+        min[z_axis] = self.k - 0.0001;
+        max[z_axis] = self.k + 0.0001;
+        min[x_axis] = self.range0.start;
+        max[x_axis] = self.range0.end;
+        min[y_axis] = self.range1.start;
+        max[y_axis] = self.range1.end;
+
+        Aabb { min, max }
+    }
+}
+
+#[derive(Debug)]
+pub struct FlipNormals<T>(pub T);
+
+impl<T: Object> Object for FlipNormals<T> {
+    #[inline]
+    fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
+        self.0.hit(ray, t_range).map(|h| HitRecord {
+            normal: -h.normal,
+            ..h
+        })
+    }
+
+    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+        self.0.bounding_box(exposure)
+    }
+}
+
+#[derive(Debug)]
+pub struct Translate<T> {
+    pub offset: Vec3,
+    pub object: T,
+}
+
+impl<T: Object> Object for Translate<T> {
+    #[inline]
+    fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
+        let t_ray = Ray {
+            origin: ray.origin - self.offset,
+            ..*ray
+        };
+        self.object.hit(&t_ray, t_range).map(|hit| HitRecord {
+            p: hit.p + self.offset,
+            ..hit
+        })
+    }
+
+    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+        let b = self.object.bounding_box(exposure);
+        Aabb {
+            min: b.min + self.offset,
+            max: b.max + self.offset,
         }
     }
 }
 
-pub fn rect_prism(p0: Vec3, p1: Vec3, material: Material) -> Vec<Object> {
-    vec![
-        Object::Rect {
-            orthogonal_to: Z,
-            range0: p0[X]..p1[X],
-            range1: p0[Y]..p1[Y],
-            k: p1[Z],
-            material: material.clone(),
-        },
-        Object::FlipNormals(Box::new(Object::Rect {
-            orthogonal_to: Z,
-            range0: p0[X]..p1[X],
-            range1: p0[Y]..p1[Y],
-            k: p0[Z],
-            material: material.clone(),
-        })),
-        Object::Rect {
-            orthogonal_to: Y,
-            range0: p0[X]..p1[X],
-            range1: p0[Z]..p1[Z],
-            k: p1[Y],
-            material: material.clone(),
-        },
-        Object::FlipNormals(Box::new(Object::Rect {
-            orthogonal_to: Y,
-            range0: p0[X]..p1[X],
-            range1: p0[Z]..p1[Z],
-            k: p0[Y],
-            material: material.clone(),
-        })),
-        Object::Rect {
-            orthogonal_to: X,
-            range0: p0[Y]..p1[Y],
-            range1: p0[Z]..p1[Z],
-            k: p1[X],
-            material: material.clone(),
-        },
-        Object::FlipNormals(Box::new(Object::Rect {
-            orthogonal_to: X,
-            range0: p0[Y]..p1[Y],
-            range1: p0[Z]..p1[Z],
-            k: p0[X],
-            material: material.clone(),
-        })),
-    ]
+#[derive(Debug)]
+pub struct RotateY<T> {
+    pub object: T,
+    pub sin_theta: f32,
+    pub cos_theta: f32,
+}
+
+impl<T: Object> Object for RotateY<T> {
+    #[inline]
+    fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
+        fn rot(p: Vec3, sin_theta: f32, cos_theta: f32) -> Vec3 {
+            Vec3(
+                p.dot(Vec3(cos_theta, 0., -sin_theta)),
+                p.dot(Vec3(0., 1., 0.)),
+                p.dot(Vec3(sin_theta, 0., cos_theta)),
+            )
+        }
+
+        let rot_ray = Ray {
+            origin: rot(ray.origin, self.sin_theta, self.cos_theta),
+            direction: rot(ray.direction, self.sin_theta, self.cos_theta),
+            ..*ray
+        };
+
+        self.object.hit(&rot_ray, t_range).map(|hit| HitRecord {
+            p: rot(hit.p, -self.sin_theta, self.cos_theta),
+            normal: rot(hit.normal, -self.sin_theta, self.cos_theta),
+            ..hit
+        })
+    }
+
+    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+        fn rot(p: Vec3, sin_theta: f32, cos_theta: f32) -> Vec3 {
+            Vec3(
+                p.dot(Vec3(cos_theta, 0., -sin_theta)),
+                p.dot(Vec3(0., 1., 0.)),
+                p.dot(Vec3(sin_theta, 0., cos_theta)),
+            )
+        }
+
+        let (min, max) = self.object.bounding_box(exposure).corners().fold(
+            (Vec3::from(std::f32::MAX), Vec3::from(std::f32::MIN)),
+            |(min, max), c| {
+                let rot_c = rot(c, -self.sin_theta, self.cos_theta);
+                (min.zip_with(rot_c, f32::max), max.zip_with(rot_c, f32::min))
+            },
+        );
+        Aabb { min, max }
+    }
+}
+
+#[derive(Debug)]
+pub struct Composite<T>(pub T, pub Vec<T>);
+
+impl<T: Object> Object for Composite<T> {
+    fn hit<'o>(&'o self, ray: &Ray, mut t_range: Range<f32>) -> Option<HitRecord<'o>> {
+        let mut hit = None;
+        for object in self.1.iter().chain(std::iter::once(&self.0)) {
+            if let Some(rec) = object.hit(ray, t_range.clone()) {
+                t_range.end = rec.t;
+                hit = Some(rec)
+            }
+        }
+        hit
+    }
+
+    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+        self.1.iter().fold(self.0.bounding_box(exposure.clone()), |a, b| {
+            a.merge(b.bounding_box(exposure.clone()))
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct And<T, S>(pub T, pub S);
+
+impl<T: Object, S: Object> Object for And<T, S> {
+    fn hit<'o>(&'o self, ray: &Ray, mut t_range: Range<f32>) -> Option<HitRecord<'o>> {
+        let hit0 = self.0.hit(ray, t_range.clone());
+        if let Some(h) = &hit0 {
+            t_range.end = h.t
+        }
+
+        let hit1 = self.1.hit(ray, t_range);
+        hit1.or(hit0)
+    }
+
+    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+        self.0
+            .bounding_box(exposure.clone())
+            .merge(self.1.bounding_box(exposure))
+    }
+}
+
+pub fn rect_prism(p0: Vec3, p1: Vec3, material: Material) -> Box<dyn Object> {
+    Box::new(And(
+        Composite(
+            Rect {
+                orthogonal_to: Z,
+                range0: p0[X]..p1[X],
+                range1: p0[Y]..p1[Y],
+                k: p1[Z],
+                material: material.clone(),
+            },
+            vec![
+                Rect {
+                    orthogonal_to: Y,
+                    range0: p0[X]..p1[X],
+                    range1: p0[Z]..p1[Z],
+                    k: p1[Y],
+                    material: material.clone(),
+                },
+                Rect {
+                    orthogonal_to: X,
+                    range0: p0[Y]..p1[Y],
+                    range1: p0[Z]..p1[Z],
+                    k: p1[X],
+                    material: material.clone(),
+                },
+            ],
+        ),
+        Composite(
+            FlipNormals(Rect {
+                orthogonal_to: Z,
+                range0: p0[X]..p1[X],
+                range1: p0[Y]..p1[Y],
+                k: p0[Z],
+                material: material.clone(),
+            }),
+            vec![
+                FlipNormals(Rect {
+                    orthogonal_to: Y,
+                    range0: p0[X]..p1[X],
+                    range1: p0[Z]..p1[Z],
+                    k: p0[Y],
+                    material: material.clone(),
+                }),
+                FlipNormals(Rect {
+                    orthogonal_to: X,
+                    range0: p0[Y]..p1[Y],
+                    range1: p0[Z]..p1[Z],
+                    k: p0[X],
+                    material: material.clone(),
+                }),
+            ],
+        ),
+    ))
 }
 
 /// A description of a `Ray` hitting an `Object`. This stores information needed

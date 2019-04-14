@@ -27,7 +27,7 @@ impl<'r, T: World + ?Sized> World for &'r T {
     }
 }
 
-impl World for [Object] {
+impl World for [Box<dyn Object>] {
     fn hit_top<'a>(&'a self, ray: &Ray) -> Option<object::HitRecord<'a>> {
         const NEAR: f32 = 0.001;
 
@@ -77,7 +77,7 @@ pub fn color(world: &impl World, mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
     Vec3::default()
 }
 
-pub fn cornell_box() -> Vec<Object> {
+pub fn cornell_box() -> Vec<Box<dyn Object>> {
     fn diffuse_color(c: Vec3) -> Material {
         Material::Lambertian {
             albedo: texture::constant(c),
@@ -91,24 +91,24 @@ pub fn cornell_box() -> Vec<Object> {
         emission: texture::constant(Vec3::from(1.)),
         brightness: 15.,
     };
-    let mut scene = vec![
-        Object::Rect {
+    let mut scene: Vec<Box<dyn Object>> = vec![
+        Box::new(object::Rect {
             orthogonal_to: Y,
             range0: 213. ..343.,
             range1: 227. ..332.,
             k: 554.,
             material: light,
-        },
+        }),
         // floor
-        Object::Rect {
+        Box::new(object::Rect {
             orthogonal_to: Y,
             range0: 0. ..555.,
             range1: 0. ..555.,
             k: 0.,
             material: white.clone(),
-        },
+        }),
         // rear wall
-        Object::FlipNormals(Box::new(Object::Rect {
+        Box::new(object::FlipNormals(object::Rect {
             orthogonal_to: Z,
             range0: 0. ..555.,
             range1: 0. ..555.,
@@ -116,7 +116,7 @@ pub fn cornell_box() -> Vec<Object> {
             material: white.clone(),
         })),
         // ceiling
-        Object::FlipNormals(Box::new(Object::Rect {
+        Box::new(object::FlipNormals(object::Rect {
             orthogonal_to: Y,
             range0: 0. ..555.,
             range1: 0. ..555.,
@@ -124,15 +124,15 @@ pub fn cornell_box() -> Vec<Object> {
             material: white.clone(),
         })),
         // right wall
-        Object::Rect {
+        Box::new(object::Rect {
             orthogonal_to: X,
             range0: 0. ..555.,
             range1: 0. ..555.,
             k: 0.,
             material: red,
-        },
+        }),
         // left wall
-        Object::FlipNormals(Box::new(Object::Rect {
+        Box::new(object::FlipNormals(object::Rect {
             orthogonal_to: X,
             range0: 0. ..555.,
             range1: 0. ..555.,
@@ -143,7 +143,7 @@ pub fn cornell_box() -> Vec<Object> {
     scene
 }
 
-pub fn cornell_box_with_boxes() -> Vec<Object> {
+pub fn cornell_box_with_boxes() -> Vec<Box<dyn Object>> {
     fn diffuse_color(c: Vec3) -> Material {
         Material::Lambertian {
             albedo: texture::constant(c),
@@ -157,24 +157,24 @@ pub fn cornell_box_with_boxes() -> Vec<Object> {
         emission: texture::constant(Vec3::from(1.)),
         brightness: 15.,
     };
-    let mut scene = vec![
-        Object::Rect {
+    let mut scene: Vec<Box<dyn Object>> = vec![
+        Box::new(object::Rect {
             orthogonal_to: Y,
             range0: 213. ..343.,
             range1: 227. ..332.,
             k: 554.,
             material: light,
-        },
+        }),
         // floor
-        Object::Rect {
+        Box::new(object::Rect {
             orthogonal_to: Y,
             range0: 0. ..555.,
             range1: 0. ..555.,
             k: 0.,
             material: white.clone(),
-        },
+        }),
         // rear wall
-        Object::FlipNormals(Box::new(Object::Rect {
+        Box::new(object::FlipNormals(object::Rect {
             orthogonal_to: Z,
             range0: 0. ..555.,
             range1: 0. ..555.,
@@ -182,7 +182,7 @@ pub fn cornell_box_with_boxes() -> Vec<Object> {
             material: white.clone(),
         })),
         // ceiling
-        Object::FlipNormals(Box::new(Object::Rect {
+        Box::new(object::FlipNormals(object::Rect {
             orthogonal_to: Y,
             range0: 0. ..555.,
             range1: 0. ..555.,
@@ -190,41 +190,43 @@ pub fn cornell_box_with_boxes() -> Vec<Object> {
             material: white.clone(),
         })),
         // right wall
-        Object::Rect {
+        Box::new(object::Rect {
             orthogonal_to: X,
             range0: 0. ..555.,
             range1: 0. ..555.,
             k: 0.,
             material: red,
-        },
+        }),
         // left wall
-        Object::FlipNormals(Box::new(Object::Rect {
+        Box::new(object::FlipNormals(object::Rect {
             orthogonal_to: X,
             range0: 0. ..555.,
             range1: 0. ..555.,
             k: 555.,
             material: green,
         })),
-        Object::Sphere {
-            center: Vec3(212., 255., 147.),
-            radius: 82.,
-            material: Material::Dielectric { ref_idx: 1.5 },
-            motion: Vec3::default(),
-        },
+        Box::new(object::Translate {
+            offset: Vec3(212., 255., 147.),
+            object: object::Sphere {
+                radius: 82.,
+                material: Material::Dielectric { ref_idx: 1.5 },
+                motion: Vec3::default(),
+            },
+        }),
     ];
-    scene.extend(object::rect_prism(
+    scene.push(object::rect_prism(
         Vec3(130., 0., 65.),
         Vec3(295., 165., 230.),
         white.clone(),
     ));
-    scene.extend(object::rect_prism(
+    scene.push(object::rect_prism(
         Vec3(265., 0., 295.),
         Vec3(430., 330., 460.),
         white,
     ));
     scene
 }
-
+/*
 pub fn simple_light() -> Vec<Object> {
     vec![
         Object::Sphere {
@@ -264,7 +266,9 @@ pub fn simple_light() -> Vec<Object> {
         },
     ]
 }
+*/
 
+/*
 pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
     let mut world = vec![Object::Sphere {
         center: Vec3(0., -1000., 0.),
@@ -346,6 +350,7 @@ pub fn random_scene(rng: &mut impl Rng) -> Vec<Object> {
 
     world
 }
+*/
 
 pub struct Image(Vec<Vec<Vec3>>);
 
