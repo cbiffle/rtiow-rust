@@ -8,12 +8,37 @@ use crate::vec3::{
     Vec3,
 };
 
-fn other_axes(axis: Axis) -> (Axis, Axis) {
-    match axis {
-        Z => (X, Y),
-        X => (Y, Z),
-        Y => (X, Z),
-    }
+pub trait StaticAxis: std::fmt::Debug + Send + Sync {
+    const AXIS: Axis;
+    const OTHER1: Axis;
+    const OTHER2: Axis;
+}
+
+#[derive(Debug)]
+pub struct StaticX;
+
+impl StaticAxis for StaticX {
+    const AXIS: Axis = Axis::X;
+    const OTHER1: Axis = Axis::Y;
+    const OTHER2: Axis = Axis::Z;
+}
+
+#[derive(Debug)]
+pub struct StaticY;
+
+impl StaticAxis for StaticY {
+    const AXIS: Axis = Axis::Y;
+    const OTHER1: Axis = Axis::X;
+    const OTHER2: Axis = Axis::Z;
+}
+
+#[derive(Debug)]
+pub struct StaticZ;
+
+impl StaticAxis for StaticZ {
+    const AXIS: Axis = Axis::Z;
+    const OTHER1: Axis = Axis::X;
+    const OTHER2: Axis = Axis::Y;
 }
 
 /// An object in a scene.
@@ -96,8 +121,8 @@ impl Object for Sphere {
 }
 
 #[derive(Debug)]
-pub struct Rect {
-    pub orthogonal_to: Axis,
+pub struct Rect<A> {
+    pub orthogonal_to: A,
     pub range0: Range<f32>,
     pub range1: Range<f32>,
     // TODO: replace with Translate?
@@ -105,21 +130,19 @@ pub struct Rect {
     pub material: Material,
 }
 
-impl Object for Rect {
+impl<A: StaticAxis> Object for Rect<A> {
     #[inline]
     fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
-        // The *_axis names are correct for orthogonal_to=Z. Use your
+        // The names x and y below are correct for orthogonal_to=Z. Use your
         // imagination for the other cases.
-        let z_axis = self.orthogonal_to;
-        let (x_axis, y_axis) = other_axes(z_axis);
 
-        let t = (self.k - ray.origin[z_axis]) / ray.direction[z_axis];
+        let t = (self.k - ray.origin[A::AXIS]) / ray.direction[A::AXIS];
         if t < t_range.start || t >= t_range.end {
             return None;
         }
 
-        let x = ray.origin[x_axis] + t * ray.direction[x_axis];
-        let y = ray.origin[y_axis] + t * ray.direction[y_axis];
+        let x = ray.origin[A::OTHER1] + t * ray.direction[A::OTHER1];
+        let y = ray.origin[A::OTHER2] + t * ray.direction[A::OTHER2];
         if x < self.range0.start
             || x >= self.range0.end
             || y < self.range1.start
@@ -130,7 +153,7 @@ impl Object for Rect {
 
         let p = ray.point_at_parameter(t);
         let mut normal = Vec3::default();
-        normal[z_axis] = 1.;
+        normal[A::AXIS] = 1.;
         Some(HitRecord {
             t,
             p,
@@ -142,16 +165,14 @@ impl Object for Rect {
     fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
         let mut min = Vec3::default();
         let mut max = Vec3::default();
-        let z_axis = self.orthogonal_to;
-        let (x_axis, y_axis) = other_axes(z_axis);
 
         // TODO: this uses epsilon fudge factors and I hate it
-        min[z_axis] = self.k - 0.0001;
-        max[z_axis] = self.k + 0.0001;
-        min[x_axis] = self.range0.start;
-        max[x_axis] = self.range0.end;
-        min[y_axis] = self.range1.start;
-        max[y_axis] = self.range1.end;
+        min[A::AXIS] = self.k - 0.0001;
+        max[A::AXIS] = self.k + 0.0001;
+        min[A::OTHER1] = self.range0.start;
+        max[A::OTHER1] = self.range0.end;
+        min[A::OTHER2] = self.range1.start;
+        max[A::OTHER2] = self.range1.end;
 
         Aabb { min, max }
     }
@@ -296,59 +317,59 @@ impl<T: Object, S: Object> Object for And<T, S> {
     }
 }
 
-pub fn rect_prism(p0: Vec3, p1: Vec3, material: Material) -> Box<dyn Object> {
-    Box::new(And(
-        Composite(
+pub fn rect_prism(p0: Vec3, p1: Vec3, material: Material) -> impl Object {
+    And(
+        And(
             Rect {
-                orthogonal_to: Z,
+                orthogonal_to: StaticZ,
                 range0: p0[X]..p1[X],
                 range1: p0[Y]..p1[Y],
                 k: p1[Z],
                 material: material.clone(),
             },
-            vec![
+            And(
                 Rect {
-                    orthogonal_to: Y,
+                    orthogonal_to: StaticY,
                     range0: p0[X]..p1[X],
                     range1: p0[Z]..p1[Z],
                     k: p1[Y],
                     material: material.clone(),
                 },
                 Rect {
-                    orthogonal_to: X,
+                    orthogonal_to: StaticX,
                     range0: p0[Y]..p1[Y],
                     range1: p0[Z]..p1[Z],
                     k: p1[X],
                     material: material.clone(),
                 },
-            ],
+            ),
         ),
-        Composite(
+        And(
             FlipNormals(Rect {
-                orthogonal_to: Z,
+                orthogonal_to: StaticZ,
                 range0: p0[X]..p1[X],
                 range1: p0[Y]..p1[Y],
                 k: p0[Z],
                 material: material.clone(),
             }),
-            vec![
+            And(
                 FlipNormals(Rect {
-                    orthogonal_to: Y,
+                    orthogonal_to: StaticY,
                     range0: p0[X]..p1[X],
                     range1: p0[Z]..p1[Z],
                     k: p0[Y],
                     material: material.clone(),
                 }),
                 FlipNormals(Rect {
-                    orthogonal_to: X,
+                    orthogonal_to: StaticX,
                     range0: p0[Y]..p1[Y],
                     range1: p0[Z]..p1[Z],
                     k: p0[X],
                     material: material.clone(),
                 }),
-            ],
+            ),
         ),
-    ))
+    )
 }
 
 /// A description of a `Ray` hitting an `Object`. This stores information needed

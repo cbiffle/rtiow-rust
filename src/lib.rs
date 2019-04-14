@@ -91,9 +91,9 @@ pub fn cornell_box() -> Vec<Box<dyn Object>> {
         emission: texture::constant(Vec3::from(1.)),
         brightness: 15.,
     };
-    let mut scene: Vec<Box<dyn Object>> = vec![
+    vec![
         Box::new(object::Rect {
-            orthogonal_to: Y,
+            orthogonal_to: object::StaticY,
             range0: 213. ..343.,
             range1: 227. ..332.,
             k: 554.,
@@ -101,7 +101,7 @@ pub fn cornell_box() -> Vec<Box<dyn Object>> {
         }),
         // floor
         Box::new(object::Rect {
-            orthogonal_to: Y,
+            orthogonal_to: object::StaticY,
             range0: 0. ..555.,
             range1: 0. ..555.,
             k: 0.,
@@ -109,7 +109,7 @@ pub fn cornell_box() -> Vec<Box<dyn Object>> {
         }),
         // rear wall
         Box::new(object::FlipNormals(object::Rect {
-            orthogonal_to: Z,
+            orthogonal_to: object::StaticZ,
             range0: 0. ..555.,
             range1: 0. ..555.,
             k: 555.,
@@ -117,7 +117,7 @@ pub fn cornell_box() -> Vec<Box<dyn Object>> {
         })),
         // ceiling
         Box::new(object::FlipNormals(object::Rect {
-            orthogonal_to: Y,
+            orthogonal_to: object::StaticY,
             range0: 0. ..555.,
             range1: 0. ..555.,
             k: 555.,
@@ -125,7 +125,7 @@ pub fn cornell_box() -> Vec<Box<dyn Object>> {
         })),
         // right wall
         Box::new(object::Rect {
-            orthogonal_to: X,
+            orthogonal_to: object::StaticX,
             range0: 0. ..555.,
             range1: 0. ..555.,
             k: 0.,
@@ -133,14 +133,13 @@ pub fn cornell_box() -> Vec<Box<dyn Object>> {
         }),
         // left wall
         Box::new(object::FlipNormals(object::Rect {
-            orthogonal_to: X,
+            orthogonal_to: object::StaticX,
             range0: 0. ..555.,
             range1: 0. ..555.,
             k: 555.,
             material: green,
         })),
-    ];
-    scene
+    ]
 }
 
 pub fn cornell_box_with_boxes() -> Vec<Box<dyn Object>> {
@@ -150,82 +149,30 @@ pub fn cornell_box_with_boxes() -> Vec<Box<dyn Object>> {
         }
     }
 
-    let red = diffuse_color(Vec3(0.65, 0.05, 0.05));
+    let mut scene = cornell_box();
     let white = diffuse_color(Vec3::from(0.73));
-    let green = diffuse_color(Vec3(0.12, 0.45, 0.15));
-    let light = Material::DiffuseLight {
-        emission: texture::constant(Vec3::from(1.)),
-        brightness: 15.,
-    };
-    let mut scene: Vec<Box<dyn Object>> = vec![
-        Box::new(object::Rect {
-            orthogonal_to: Y,
-            range0: 213. ..343.,
-            range1: 227. ..332.,
-            k: 554.,
-            material: light,
-        }),
-        // floor
-        Box::new(object::Rect {
-            orthogonal_to: Y,
-            range0: 0. ..555.,
-            range1: 0. ..555.,
-            k: 0.,
-            material: white.clone(),
-        }),
-        // rear wall
-        Box::new(object::FlipNormals(object::Rect {
-            orthogonal_to: Z,
-            range0: 0. ..555.,
-            range1: 0. ..555.,
-            k: 555.,
-            material: white.clone(),
-        })),
-        // ceiling
-        Box::new(object::FlipNormals(object::Rect {
-            orthogonal_to: Y,
-            range0: 0. ..555.,
-            range1: 0. ..555.,
-            k: 555.,
-            material: white.clone(),
-        })),
-        // right wall
-        Box::new(object::Rect {
-            orthogonal_to: X,
-            range0: 0. ..555.,
-            range1: 0. ..555.,
-            k: 0.,
-            material: red,
-        }),
-        // left wall
-        Box::new(object::FlipNormals(object::Rect {
-            orthogonal_to: X,
-            range0: 0. ..555.,
-            range1: 0. ..555.,
-            k: 555.,
-            material: green,
-        })),
+
+    scene.push(
         Box::new(object::Translate {
-            offset: Vec3(212., 255., 147.),
-            object: object::Sphere {
-                radius: 82.,
-                material: Material::Dielectric { ref_idx: 1.5 },
-                motion: Vec3::default(),
-            },
-        }),
-    ];
-    scene.push(object::rect_prism(
-        Vec3(130., 0., 65.),
-        Vec3(295., 165., 230.),
-        white.clone(),
-    ));
-    scene.push(object::rect_prism(
-        Vec3(265., 0., 295.),
-        Vec3(430., 330., 460.),
-        white,
-    ));
+            offset: Vec3(130., 0., 65.),
+            object: object::rotate_y(
+                -18.,
+                object::rect_prism(Vec3(0., 0., 0.), Vec3(165., 165., 165.), white.clone()),
+            ),
+        })
+    );
+    scene.push(
+        Box::new(object::Translate {
+            offset: Vec3(265., 0., 295.),
+            object: object::rotate_y(
+                15.,
+                object::rect_prism(Vec3(0., 0., 0.), Vec3(165., 330., 165.), white),
+            ),
+        })
+    );
     scene
 }
+
 /*
 pub fn simple_light() -> Vec<Object> {
     vec![
@@ -255,7 +202,7 @@ pub fn simple_light() -> Vec<Object> {
             motion: Vec3::default(),
         },
         Object::Rect {
-            orthogonal_to: Axis::Z,
+            orthogonal_to: object::StaticAxis::Z,
             range0: 3. ..5.,
             range1: 1. ..3.,
             k: -2.,
