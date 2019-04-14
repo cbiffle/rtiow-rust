@@ -8,39 +8,6 @@ use crate::vec3::{
     Vec3,
 };
 
-pub trait StaticAxis: std::fmt::Debug + Send + Sync {
-    const AXIS: Axis;
-    const OTHER1: Axis;
-    const OTHER2: Axis;
-}
-
-#[derive(Debug)]
-pub struct StaticX;
-
-impl StaticAxis for StaticX {
-    const AXIS: Axis = Axis::X;
-    const OTHER1: Axis = Axis::Y;
-    const OTHER2: Axis = Axis::Z;
-}
-
-#[derive(Debug)]
-pub struct StaticY;
-
-impl StaticAxis for StaticY {
-    const AXIS: Axis = Axis::Y;
-    const OTHER1: Axis = Axis::X;
-    const OTHER2: Axis = Axis::Z;
-}
-
-#[derive(Debug)]
-pub struct StaticZ;
-
-impl StaticAxis for StaticZ {
-    const AXIS: Axis = Axis::Z;
-    const OTHER1: Axis = Axis::X;
-    const OTHER2: Axis = Axis::Y;
-}
-
 /// An object in a scene.
 ///
 /// The primary purpose of an `Object` is to interact with rays of light using
@@ -137,14 +104,66 @@ impl Object for Sphere {
     }
 }
 
+/// A rectangle orthogonal to one axis.
+///
+/// The rectangle is specified by the name of its orthogonal axis, and the
+/// ranges in the other two axes. "Other two" is alphabetical, so for example,
+/// if `orthogonal_to` is `StaticZ`, the other two are X and Y.
+///
+/// The axis is named at compile time from one of `StaticX`, `StaticY`, and
+/// `StaticZ`. This gets us code customed to each case, without having separate
+/// types for `RectXY`, `RectYZ`, and `RectXZ`.
 #[derive(Debug, Clone)]
-pub struct Rect<A> {
+pub struct Rect<A: StaticAxis> {
+    /// Axis normal to this rectangle.
     pub orthogonal_to: A,
+    /// Range in alphabetically lower non-orthogonal axis.
     pub range0: Range<f32>,
+    /// Range in alphabetically higher non-orthogonal axis.
     pub range1: Range<f32>,
-    // TODO: replace with Translate?
+    /// Position along the orthogonal axis.
+    ///
+    /// TODO: replace with Translate?
     pub k: f32,
+    /// Rectangle material.
     pub material: Material,
+}
+
+/// Trait implemented by static axis types for `Rect`.
+pub trait StaticAxis: std::fmt::Debug + Send + Sync {
+    const AXIS: Axis;
+    const OTHER1: Axis;
+    const OTHER2: Axis;
+}
+
+/// Compile-time (static) name for the X axis.
+#[derive(Debug)]
+pub struct StaticX;
+
+impl StaticAxis for StaticX {
+    const AXIS: Axis = Axis::X;
+    const OTHER1: Axis = Axis::Y;
+    const OTHER2: Axis = Axis::Z;
+}
+
+/// Compile-time (static) name for the Y axis.
+#[derive(Debug)]
+pub struct StaticY;
+
+impl StaticAxis for StaticY {
+    const AXIS: Axis = Axis::Y;
+    const OTHER1: Axis = Axis::X;
+    const OTHER2: Axis = Axis::Z;
+}
+
+/// Compile-time (static) name for the Z axis.
+#[derive(Debug)]
+pub struct StaticZ;
+
+impl StaticAxis for StaticZ {
+    const AXIS: Axis = Axis::Z;
+    const OTHER1: Axis = Axis::X;
+    const OTHER2: Axis = Axis::Y;
 }
 
 impl<A: StaticAxis> Object for Rect<A> {
@@ -184,7 +203,7 @@ impl<A: StaticAxis> Object for Rect<A> {
         })
     }
 
-    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+    fn bounding_box(&self, _exposure: std::ops::Range<f32>) -> Aabb {
         let mut min = Vec3::default();
         let mut max = Vec3::default();
 
@@ -200,10 +219,12 @@ impl<A: StaticAxis> Object for Rect<A> {
     }
 }
 
+/// The same geometry as the contained `O`, but with the normal vectors
+/// inverted.
 #[derive(Debug, Clone)]
-pub struct FlipNormals<T>(pub T);
+pub struct FlipNormals<O>(pub O);
 
-impl<T: Object> Object for FlipNormals<T> {
+impl<O: Object> Object for FlipNormals<O> {
     #[inline]
     fn hit<'o>(
         &'o self,
@@ -222,10 +243,11 @@ impl<T: Object> Object for FlipNormals<T> {
     }
 }
 
+/// The same geometry as `O`, but translated by `offset` from the origin.
 #[derive(Debug, Clone)]
-pub struct Translate<T> {
+pub struct Translate<O> {
     pub offset: Vec3,
-    pub object: T,
+    pub object: O,
 }
 
 impl<T: Object> Object for Translate<T> {
@@ -255,11 +277,15 @@ impl<T: Object> Object for Translate<T> {
     }
 }
 
+/// The same geometry as `O`, but rotated around the Y axis.
+///
+/// Use the `rotate_y` function to obtain one of these that's been filled out
+/// correctly.
 #[derive(Debug, Clone)]
-pub struct RotateY<T> {
-    pub object: T,
-    pub sin_theta: f32,
-    pub cos_theta: f32,
+pub struct RotateY<O> {
+    pub object: O,
+    sin_theta: f32,
+    cos_theta: f32,
 }
 
 impl<T: Object> Object for RotateY<T> {
@@ -313,35 +339,7 @@ impl<T: Object> Object for RotateY<T> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Composite<T>(pub T, pub Vec<T>);
-
-impl<T: Object> Object for Composite<T> {
-    fn hit<'o>(
-        &'o self,
-        ray: &Ray,
-        mut t_range: Range<f32>,
-        rng: &mut dyn FnMut() -> f32,
-    ) -> Option<HitRecord<'o>> {
-        let mut hit = None;
-        for object in self.1.iter().chain(std::iter::once(&self.0)) {
-            if let Some(rec) = object.hit(ray, t_range.clone(), rng) {
-                t_range.end = rec.t;
-                hit = Some(rec)
-            }
-        }
-        hit
-    }
-
-    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
-        self.1
-            .iter()
-            .fold(self.0.bounding_box(exposure.clone()), |a, b| {
-                a.merge(b.bounding_box(exposure.clone()))
-            })
-    }
-}
-
+/// Combines both `T` and `S` into one `Object`.
 #[derive(Debug, Clone)]
 pub struct And<T, S>(pub T, pub S);
 
@@ -368,6 +366,7 @@ impl<T: Object, S: Object> Object for And<T, S> {
     }
 }
 
+/// Generates a rectangular prism having min and max corners `p0` and `p1`.
 pub fn rect_prism(p0: Vec3, p1: Vec3, material: Material) -> impl Object {
     And(
         And(
@@ -423,6 +422,8 @@ pub fn rect_prism(p0: Vec3, p1: Vec3, material: Material) -> impl Object {
     )
 }
 
+/// Returns a version of `object` that has been rotated `degrees` around the Y
+/// axis.
 pub fn rotate_y<O: Object>(degrees: f32, object: O) -> RotateY<O> {
     let radians = degrees * std::f32::consts::PI / 180.;
     RotateY {
@@ -432,9 +433,13 @@ pub fn rotate_y<O: Object>(degrees: f32, object: O) -> RotateY<O> {
     }
 }
 
+/// Imposes a motion vector on an object, causing motion blur proportional to
+/// the length of the motion vector times the length of the exposure.
 #[derive(Debug, Clone)]
 pub struct LinearMove<O> {
+    /// The object being moved.
     pub object: O,
+    /// Its motion per unit time.
     pub motion: Vec3,
 }
 
@@ -472,10 +477,16 @@ impl<O: Object> Object for LinearMove<O> {
     }
 }
 
+/// A medium of constant density that scatters light internally, such as
+/// (greatly simplified) smoke or fog.
 #[derive(Debug, Clone)]
 pub struct ConstantMedium<O> {
+    /// Outer boundary of the medium, expressed as another object.
     pub boundary: O,
+    /// Density of the medium -- how likely is a scattering event per unit
+    /// travel?
     pub density: f32,
+    /// Material that controls scattering behavior.
     pub material: Material,
 }
 
@@ -495,7 +506,7 @@ impl<O: Object> Object for ConstantMedium<O> {
                     return None;
                 }
 
-                assert!(hit1.t >= 0.);
+                debug_assert!(hit1.t >= 0.);
 
                 let distance_inside = (hit2.t - hit1.t) * ray.direction.length();
                 let hit_distance = -(1. / self.density) * rng().ln();

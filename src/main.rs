@@ -7,6 +7,7 @@ use rtiow::object::{self, Object};
 use rtiow::vec3::Vec3;
 use rtiow::*;
 
+#[allow(unused)]
 fn cornell_box_scene(nx: usize, ny: usize) -> (Vec<Box<dyn Object>>, Camera, Range<f32>) {
     let look_from = Vec3(278., 278., -800.);
     let look_at = Vec3(278., 278., 0.);
@@ -28,6 +29,7 @@ fn cornell_box_scene(nx: usize, ny: usize) -> (Vec<Box<dyn Object>>, Camera, Ran
     (cornell_box_with_boxes(), camera, exposure)
 }
 
+#[allow(unused)]
 fn motion_test(nx: usize, ny: usize) -> (Vec<Box<dyn Object>>, Camera, Range<f32>) {
     let look_from = Vec3(278., 278., -800.);
     let look_at = Vec3(278., 278., 0.);
@@ -64,6 +66,7 @@ fn motion_test(nx: usize, ny: usize) -> (Vec<Box<dyn Object>>, Camera, Range<f32
     (scene, camera, exposure)
 }
 
+#[allow(unused)]
 fn volume_test(nx: usize, ny: usize) -> (Vec<Box<dyn Object>>, Camera, Range<f32>) {
     let look_from = Vec3(278., 278., -800.);
     let look_at = Vec3(278., 278., 0.);
@@ -104,6 +107,7 @@ fn volume_test(nx: usize, ny: usize) -> (Vec<Box<dyn Object>>, Camera, Range<f32
     (scene, camera, exposure)
 }
 
+#[allow(unused)]
 fn simple_light_scene(
     nx: usize,
     ny: usize,

@@ -15,7 +15,7 @@ use crate::camera::Camera;
 use crate::material::Material;
 use crate::object::Object;
 use crate::ray::Ray;
-use crate::vec3::{Axis::*, Channel::*, *};
+use crate::vec3::{Channel::*, *};
 
 pub trait World: Send + Sync {
     fn hit_top<'a>(&'a self, ray: &Ray, rng: &mut impl Rng) -> Option<object::HitRecord<'a>>;
@@ -55,23 +55,40 @@ impl World for bvh::Bvh {
 ///
 /// This is the actual ray-tracing routine.
 pub fn color(world: &impl World, mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
+    // Accumulates contribution of each surface we reach.
+    let mut accum = Vec3::default();
+    // Records the cumulative (product) attenuation of each surface we've
+    // visited so far.
     let mut strength = Vec3::from(1.);
-    let mut emitted = Vec3::default();
+
     let mut bounces = 0;
 
+    // Iterate until one of the following conditions is reached:
+    // 1. The ray escapes into space (i.e. no objects are hit).
+    // 2. The ray reaches a surface that does not scatter.
+    // 3. The ray bounces more than 50 times.
     while let Some(hit) = world.hit_top(&ray, rng) {
-        if bounces < 50 {
-            if let Some((new_ray, attenuation)) = hit.material.scatter(&ray, &hit, rng) {
-                ray = new_ray;
-                emitted = emitted + strength * hit.material.emitted(hit.p);
-                strength = strength * attenuation;
-                bounces += 1;
-                continue;
-            } else {
-                return emitted + strength * hit.material.emitted(hit.p);
-            }
+        if bounces == 50 { break }
+        bounces += 1;
+
+        // Record this hit's contribution, attenuated by the total attenuation
+        // so far.
+        accum = accum + strength * hit.material.emitted(hit.p);
+
+        // Check whether the material scatters light, generating a new ray. In
+        // practice this is true for everything but the emission-only
+        // DiffuseLight type.
+        //
+        // TODO: and also for frosted metal, which effectively makes frosted
+        // metal an emitter. That can't be right.
+        if let Some((new_ray, attenuation)) = hit.material.scatter(&ray, &hit, rng) {
+            // Redirect flight, accumulate the new attenuation value.
+            ray = new_ray;
+            strength = strength * attenuation;
+        } else {
+            // Locally absorbed; we're done.
+            return accum
         }
-        return Vec3::default();
     }
 
     Vec3::default()

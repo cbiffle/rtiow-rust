@@ -68,11 +68,13 @@ impl Material {
                     origin: hit.p,
                     direction: reflect(ray.direction.into_unit(), hit.normal)
                         + *fuzz * Vec3::in_unit_sphere(rng),
-                    time: ray.time,
+                    ..*ray
                 };
                 if scattered.direction.dot(hit.normal) > 0. {
                     Some((scattered, *albedo))
                 } else {
+                    // TODO: this is in the original, but has the odd effect of
+                    // making metal an emitter.
                     None
                 }
             }

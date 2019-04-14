@@ -116,7 +116,7 @@ impl Object for Bvh {
         }
     }
 
-    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+    fn bounding_box(&self, _exposure: std::ops::Range<f32>) -> Aabb {
         self.bounding_box
     }
 }
