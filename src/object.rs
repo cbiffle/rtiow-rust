@@ -56,7 +56,15 @@ pub trait Object: std::fmt::Debug + Sync + Send {
     /// upper end of `t_range` starts out as infinity, we adjust it down as we
     /// find objects along `ray`. Once we've found an object at position `t`, we
     /// can ignore any objects at positions greater than `t`.
-    fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>>;
+    ///
+    /// The `rng` is available for use by materials that have nondeterministic
+    /// interaction with light, such as smoke and fog.
+    fn hit<'o>(
+        &'o self,
+        ray: &Ray,
+        t_range: Range<f32>,
+        rng: &mut dyn FnMut() -> f32,
+    ) -> Option<HitRecord<'o>>;
 
     /// Computes the bounding box for the object at the given range of times.
     /// This is called during scene setup, not rendering, and so it may be
@@ -92,7 +100,12 @@ pub struct Sphere {
 
 impl Object for Sphere {
     #[inline]
-    fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
+    fn hit<'o>(
+        &'o self,
+        ray: &Ray,
+        t_range: Range<f32>,
+        _rng: &mut dyn FnMut() -> f32,
+    ) -> Option<HitRecord<'o>> {
         let a = ray.direction.dot(ray.direction);
         let b = ray.origin.dot(ray.direction);
         let c = ray.origin.dot(ray.origin) - self.radius * self.radius;
@@ -136,7 +149,12 @@ pub struct Rect<A> {
 
 impl<A: StaticAxis> Object for Rect<A> {
     #[inline]
-    fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
+    fn hit<'o>(
+        &'o self,
+        ray: &Ray,
+        t_range: Range<f32>,
+        _rng: &mut dyn FnMut() -> f32,
+    ) -> Option<HitRecord<'o>> {
         // The names x and y below are correct for orthogonal_to=Z. Use your
         // imagination for the other cases.
 
@@ -187,8 +205,13 @@ pub struct FlipNormals<T>(pub T);
 
 impl<T: Object> Object for FlipNormals<T> {
     #[inline]
-    fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
-        self.0.hit(ray, t_range).map(|h| HitRecord {
+    fn hit<'o>(
+        &'o self,
+        ray: &Ray,
+        t_range: Range<f32>,
+        rng: &mut dyn FnMut() -> f32,
+    ) -> Option<HitRecord<'o>> {
+        self.0.hit(ray, t_range, rng).map(|h| HitRecord {
             normal: -h.normal,
             ..h
         })
@@ -207,12 +230,17 @@ pub struct Translate<T> {
 
 impl<T: Object> Object for Translate<T> {
     #[inline]
-    fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
+    fn hit<'o>(
+        &'o self,
+        ray: &Ray,
+        t_range: Range<f32>,
+        rng: &mut dyn FnMut() -> f32,
+    ) -> Option<HitRecord<'o>> {
         let t_ray = Ray {
             origin: ray.origin - self.offset,
             ..*ray
         };
-        self.object.hit(&t_ray, t_range).map(|hit| HitRecord {
+        self.object.hit(&t_ray, t_range, rng).map(|hit| HitRecord {
             p: hit.p + self.offset,
             ..hit
         })
@@ -236,7 +264,12 @@ pub struct RotateY<T> {
 
 impl<T: Object> Object for RotateY<T> {
     #[inline]
-    fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
+    fn hit<'o>(
+        &'o self,
+        ray: &Ray,
+        t_range: Range<f32>,
+        rng: &mut dyn FnMut() -> f32,
+    ) -> Option<HitRecord<'o>> {
         fn rot(p: Vec3, sin_theta: f32, cos_theta: f32) -> Vec3 {
             Vec3(
                 p.dot(Vec3(cos_theta, 0., sin_theta)),
@@ -251,11 +284,13 @@ impl<T: Object> Object for RotateY<T> {
             ..*ray
         };
 
-        self.object.hit(&rot_ray, t_range).map(|hit| HitRecord {
-            p: rot(hit.p, self.sin_theta, self.cos_theta),
-            normal: rot(hit.normal, self.sin_theta, self.cos_theta),
-            ..hit
-        })
+        self.object
+            .hit(&rot_ray, t_range, rng)
+            .map(|hit| HitRecord {
+                p: rot(hit.p, self.sin_theta, self.cos_theta),
+                normal: rot(hit.normal, self.sin_theta, self.cos_theta),
+                ..hit
+            })
     }
 
     fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
@@ -282,10 +317,15 @@ impl<T: Object> Object for RotateY<T> {
 pub struct Composite<T>(pub T, pub Vec<T>);
 
 impl<T: Object> Object for Composite<T> {
-    fn hit<'o>(&'o self, ray: &Ray, mut t_range: Range<f32>) -> Option<HitRecord<'o>> {
+    fn hit<'o>(
+        &'o self,
+        ray: &Ray,
+        mut t_range: Range<f32>,
+        rng: &mut dyn FnMut() -> f32,
+    ) -> Option<HitRecord<'o>> {
         let mut hit = None;
         for object in self.1.iter().chain(std::iter::once(&self.0)) {
-            if let Some(rec) = object.hit(ray, t_range.clone()) {
+            if let Some(rec) = object.hit(ray, t_range.clone(), rng) {
                 t_range.end = rec.t;
                 hit = Some(rec)
             }
@@ -294,9 +334,11 @@ impl<T: Object> Object for Composite<T> {
     }
 
     fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
-        self.1.iter().fold(self.0.bounding_box(exposure.clone()), |a, b| {
-            a.merge(b.bounding_box(exposure.clone()))
-        })
+        self.1
+            .iter()
+            .fold(self.0.bounding_box(exposure.clone()), |a, b| {
+                a.merge(b.bounding_box(exposure.clone()))
+            })
     }
 }
 
@@ -304,13 +346,18 @@ impl<T: Object> Object for Composite<T> {
 pub struct And<T, S>(pub T, pub S);
 
 impl<T: Object, S: Object> Object for And<T, S> {
-    fn hit<'o>(&'o self, ray: &Ray, mut t_range: Range<f32>) -> Option<HitRecord<'o>> {
-        let hit0 = self.0.hit(ray, t_range.clone());
+    fn hit<'o>(
+        &'o self,
+        ray: &Ray,
+        mut t_range: Range<f32>,
+        rng: &mut dyn FnMut() -> f32,
+    ) -> Option<HitRecord<'o>> {
+        let hit0 = self.0.hit(ray, t_range.clone(), rng);
         if let Some(h) = &hit0 {
             t_range.end = h.t
         }
 
-        let hit1 = self.1.hit(ray, t_range);
+        let hit1 = self.1.hit(ray, t_range, rng);
         hit1.or(hit0)
     }
 
@@ -393,8 +440,20 @@ pub struct LinearMove<O> {
 
 impl<O: Object> Object for LinearMove<O> {
     #[inline]
-    fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
-        self.object.hit(&Ray { origin: ray.origin - ray.time * self.motion, ..*ray}, t_range)
+    fn hit<'o>(
+        &'o self,
+        ray: &Ray,
+        t_range: Range<f32>,
+        rng: &mut dyn FnMut() -> f32,
+    ) -> Option<HitRecord<'o>> {
+        self.object.hit(
+            &Ray {
+                origin: ray.origin - ray.time * self.motion,
+                ..*ray
+            },
+            t_range,
+            rng,
+        )
     }
 
     fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {

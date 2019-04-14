@@ -18,24 +18,24 @@ use crate::ray::Ray;
 use crate::vec3::{Axis::*, Channel::*, *};
 
 pub trait World: Send + Sync {
-    fn hit_top<'a>(&'a self, ray: &Ray) -> Option<object::HitRecord<'a>>;
+    fn hit_top<'a>(&'a self, ray: &Ray, rng: &mut impl Rng) -> Option<object::HitRecord<'a>>;
 }
 
 impl<'r, T: World + ?Sized> World for &'r T {
-    fn hit_top<'a>(&'a self, ray: &Ray) -> Option<object::HitRecord<'a>> {
-        (*self).hit_top(ray)
+    fn hit_top<'a>(&'a self, ray: &Ray, rng: &mut impl Rng) -> Option<object::HitRecord<'a>> {
+        (*self).hit_top(ray, rng)
     }
 }
 
 impl World for [Box<dyn Object>] {
-    fn hit_top<'a>(&'a self, ray: &Ray) -> Option<object::HitRecord<'a>> {
+    fn hit_top<'a>(&'a self, ray: &Ray, rng: &mut impl Rng) -> Option<object::HitRecord<'a>> {
         const NEAR: f32 = 0.001;
 
         let mut nearest = std::f32::MAX;
         let mut hit = None;
 
         for obj in self {
-            if let Some(rec) = obj.hit(ray, NEAR..nearest) {
+            if let Some(rec) = obj.hit(ray, NEAR..nearest, &mut || rng.gen()) {
                 nearest = rec.t;
                 hit = Some(rec);
             }
@@ -46,8 +46,8 @@ impl World for [Box<dyn Object>] {
 }
 
 impl World for bvh::Bvh {
-    fn hit_top<'a>(&'a self, ray: &Ray) -> Option<object::HitRecord<'a>> {
-        self.hit(ray, 0.001..std::f32::MAX)
+    fn hit_top<'a>(&'a self, ray: &Ray, rng: &mut impl Rng) -> Option<object::HitRecord<'a>> {
+        self.hit(ray, 0.001..std::f32::MAX, &mut || rng.gen())
     }
 }
 
@@ -59,7 +59,7 @@ pub fn color(world: &impl World, mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
     let mut emitted = Vec3::default();
     let mut bounces = 0;
 
-    while let Some(hit) = world.hit_top(&ray) {
+    while let Some(hit) = world.hit_top(&ray, rng) {
         if bounces < 50 {
             if let Some((new_ray, attenuation)) = hit.material.scatter(&ray, &hit, rng) {
                 ray = new_ray;
