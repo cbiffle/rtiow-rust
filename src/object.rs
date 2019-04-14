@@ -88,19 +88,14 @@ pub struct Sphere {
     pub radius: f32,
     /// Material of the sphere.
     pub material: Material,
-    /// Motion vector displacing sphere from the origin over time.
-    pub motion: Vec3,
 }
 
 impl Object for Sphere {
     #[inline]
     fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
-        let t_center = ray.time * self.motion;
-
-        let oc = ray.origin - t_center;
         let a = ray.direction.dot(ray.direction);
-        let b = oc.dot(ray.direction);
-        let c = oc.dot(oc) - self.radius * self.radius;
+        let b = ray.origin.dot(ray.direction);
+        let c = ray.origin.dot(ray.origin) - self.radius * self.radius;
         let discriminant = b * b - a * c;
         if discriminant > 0. {
             for &t in &[
@@ -121,19 +116,11 @@ impl Object for Sphere {
         None
     }
 
-    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
-        let p1 = exposure.start * self.motion;
-        let bb1 = Aabb {
-            min: p1 - Vec3::from(self.radius),
-            max: p1 + Vec3::from(self.radius),
-        };
-        let p2 = exposure.end * self.motion;
-        let bb2 = Aabb {
-            min: p2 - Vec3::from(self.radius),
-            max: p2 + Vec3::from(self.radius),
-        };
-
-        bb1.merge(bb2)
+    fn bounding_box(&self, _exposure: std::ops::Range<f32>) -> Aabb {
+        Aabb {
+            min: -Vec3::from(self.radius),
+            max: Vec3::from(self.radius),
+        }
     }
 }
 
@@ -397,3 +384,32 @@ pub fn rotate_y<O: Object>(degrees: f32, object: O) -> RotateY<O> {
         cos_theta: radians.cos(),
     }
 }
+
+#[derive(Debug)]
+pub struct LinearMove<O> {
+    pub object: O,
+    pub motion: Vec3,
+}
+
+impl<O: Object> Object for LinearMove<O> {
+    #[inline]
+    fn hit<'o>(&'o self, ray: &Ray, t_range: Range<f32>) -> Option<HitRecord<'o>> {
+        self.object.hit(&Ray { origin: ray.origin - ray.time * self.motion, ..*ray}, t_range)
+    }
+
+    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+        let bb = self.object.bounding_box(exposure.clone());
+
+        let bb_start = Aabb {
+            min: bb.min + exposure.start * self.motion,
+            max: bb.max + exposure.start * self.motion,
+        };
+        let bb_end = Aabb {
+            min: bb.min + exposure.end * self.motion,
+            max: bb.max + exposure.end * self.motion,
+        };
+
+        bb_start.merge(bb_end)
+    }
+}
+
