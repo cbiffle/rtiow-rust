@@ -303,7 +303,7 @@ fn book_final_scene(
                 },
             }) as Box<dyn Object>
         }).collect();
-        let bvh = rtiow::bvh::from_scene(spheres, exposure.clone(), rng);
+        let bvh = rtiow::bvh::from_scene(spheres, exposure.clone());
         object::Translate {
             offset: Vec3(-100., 270., 395.),
             object: object::rotate_y(
@@ -337,7 +337,7 @@ fn main() {
 
     let (image, time) = if USE_BVH {
         eprintln!("Generating bounding volume hierarchy.");
-        let world = rtiow::bvh::from_scene(world, exposure, &mut rng);
+        let world = rtiow::bvh::from_scene(world, exposure);
         eprintln!("Done.");
         let start = Instant::now();
         (par_cast(NX, NY, NS, &camera, world), start.elapsed())
