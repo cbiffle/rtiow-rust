@@ -1,3 +1,5 @@
+#![deny(unsafe_code)]
+
 mod aabb;
 pub mod bvh;
 pub mod camera;
