@@ -90,8 +90,11 @@ exhaustive.
 To compare the performance of the Rust codebase to Shirley's C++ codebase (on
 Github), I've used the following settings:
 
-- Scene: final scene from book 2, with the texture-mapped Earth sphere removed
-  (because I couldn't be bothered to implement it in Rust yet).
+- Scenes: Cornell box with rectangular prisms, and final scene from book 2, with
+  the texture-mapped Earth sphere removed (because I couldn't be bothered to
+  implement it in Rust yet).
+- C++ and Rust using the same scene data structures (bounding volume hierarchies
+  for certain dense areas, simple vectors everywhere else).
 - Computer: Skylake Thinkpad (Intel i7-8550U, 4 cores / 8 threads).
 - `rustc` 1.33.0.
 - GCC 8.2.1.
@@ -107,10 +110,21 @@ code is split across many files, a library target, a binary target, and uses
 upstream libraries. To level the playing field, I switched on LTO in
 `Cargo.toml`.
 
-**At the time of this writing, the performance of the two programs is identical
-on the test scene when each is restricted to a single CPU.** Both programs
-complete in exactly 32.43s when rendering at 300x300x100. (The Rust version uses
-about 10% less RAM.)
+Here are the results at the time of this writing (scenes rendered at
+300x300x100):
+
+| Scene        | C++    | Rust 1CPU | Ratio  | Rust 4CPU | Ratio  |
+| ------------ | ------ | --------- | ------ | --------- | ------ |
+| Cornell box  | 14.25s | 10.91s    | 0.7656 | 2.94s     | 0.2063 |
+| RT:TNW final | 32.48s | 18.07s    | 0.5563 | 5.01s     | 0.1542 |
+
+Which is to say, **the Rust code is substantially faster than the original:**
+
+- Limited to one CPU, the Rust implementation takes between 24% and 45% less
+  time than the C++ implementation, depending on the scene.
+
+- When not limited, it takes 80% to 85% less time. (I think counting this is
+  fair, because parallelizing Rust code is so easy compared to C++.)
 
 This is *despite* the Rust code technically doing more work: all array/vector
 accesses are bounds-checked, certain corners of floating-point math are checked
@@ -119,11 +133,7 @@ and all memory operations are both memory-safe and thread-safe. **Remember this
 next time a C programmer insists that they need to do unsafe tricks "for
 performance."**
 
-Plus, note that the Rust program is *not* a single-threaded build: it's the
-SMP-aware multithreaded build being told to use only one core. When it is
-allowed use of all 4 cores (8 threads), performance improves linearly with the
-number of cores made available. The scene completes in 6.92s, showing that we
-benefit only a little from hyperthreading.
+(Interestingly, the Rust programs also use about half the RAM.)
 
 ### Lines of code
 
