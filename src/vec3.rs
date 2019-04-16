@@ -131,6 +131,16 @@ impl std::ops::Mul<Vec3> for f32 {
     }
 }
 
+/// Element-wise division.
+impl std::ops::Div for Vec3 {
+    type Output = Vec3;
+
+    #[inline]
+    fn div(self, rhs: Vec3) -> Self::Output {
+        self.zip_with(rhs, std::ops::Div::div)
+    }
+}
+
 /// `vector / scalar`
 impl std::ops::Div<f32> for Vec3 {
     type Output = Vec3;

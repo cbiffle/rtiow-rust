@@ -291,6 +291,42 @@ impl<T: Object> Object for Translate<T> {
     }
 }
 
+/// The same geometry as `O`, but scaled by `factor` on each axis.
+#[derive(Debug, Clone)]
+pub struct Scale<O> {
+    pub factor: Vec3,
+    pub object: O,
+}
+
+impl<T: Object> Object for Scale<T> {
+    #[inline]
+    fn hit<'o>(
+        &'o self,
+        ray: &Ray,
+        t_range: Range<f32>,
+        rng: &mut dyn FnMut() -> f32,
+    ) -> Option<HitRecord<'o>> {
+        let t_ray = Ray {
+            origin: ray.origin / self.factor,
+            direction: ray.direction / self.factor,
+            ..*ray
+        };
+        self.object.hit(&t_ray, t_range, rng).map(|hit| HitRecord {
+            p: hit.p * self.factor,
+            normal: hit.normal / self.factor,
+            ..hit
+        })
+    }
+
+    fn bounding_box(&self, exposure: Range<f32>) -> Aabb {
+        let b = self.object.bounding_box(exposure);
+        Aabb {
+            min: b.min * self.factor,
+            max: b.max * self.factor,
+        }
+    }
+}
+
 /// The same geometry as `O`, but rotated around the Y axis.
 ///
 /// Use the `rotate_y` function to obtain one of these that's been filled out
