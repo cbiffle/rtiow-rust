@@ -1,4 +1,4 @@
-use criterion::{criterion_group, Criterion, BatchSize};
+use criterion::{criterion_group, BatchSize, Criterion};
 use rand::prelude::*;
 
 use rtiow::vec3::Vec3;
@@ -10,15 +10,15 @@ fn criterion_benchmark(c: &mut Criterion) {
         const NY: usize = 10;
         const NS: usize = 4;
 
-        let mut rng = rand::rngs::SmallRng::seed_from_u64(0xDEADBEEF);
-        let world = random_scene(&mut rng);
+        let world = cornell_box_with_boxes();
+        let world = bvh::from_scene(world, 0. ..1.);
 
         let look_from = Vec3(13., 2., 3.);
         let look_at = Vec3(0., 0., 0.);
         let dist_to_focus = 10.;
         let aperture = 0.1;
 
-        let camera = Camera::look(
+        let camera = camera::Camera::look(
             look_from,
             look_at,
             Vec3(0., 1., 0.),
@@ -26,8 +26,10 @@ fn criterion_benchmark(c: &mut Criterion) {
             NX as f32 / NY as f32,
             aperture,
             dist_to_focus,
+            0. ..1.,
         );
 
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(0xDEADBEEF);
         b.iter_batched(
             || (),
             |_| cast(NX, NY, NS, &camera, &world, &mut rng),
@@ -39,15 +41,15 @@ fn criterion_benchmark(c: &mut Criterion) {
         const NY: usize = 10;
         const NS: usize = 4;
 
-        let mut rng = rand::rngs::SmallRng::seed_from_u64(0xDEADBEEF);
-        let world = random_scene(&mut rng);
+        let world = cornell_box_with_boxes();
+        let world = bvh::from_scene(world, 0. ..1.);
 
         let look_from = Vec3(13., 2., 3.);
         let look_at = Vec3(0., 0., 0.);
         let dist_to_focus = 10.;
         let aperture = 0.1;
 
-        let camera = Camera::look(
+        let camera = camera::Camera::look(
             look_from,
             look_at,
             Vec3(0., 1., 0.),
@@ -55,6 +57,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             NX as f32 / NY as f32,
             aperture,
             dist_to_focus,
+            0. ..1.,
         );
 
         b.iter_batched(

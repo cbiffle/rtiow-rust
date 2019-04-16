@@ -1,4 +1,3 @@
-use rand::prelude::*;
 use std::ops::Range;
 
 use crate::aabb::Aabb;
@@ -20,12 +19,12 @@ pub enum BvhContents {
 }
 
 impl Bvh {
-    pub fn new(mut objs: Vec<Box<Object>>, exposure: Range<f32>) -> Self {
+    pub fn new(mut objs: Vec<Box<dyn Object>>, exposure: Range<f32>) -> Self {
         // Note: though this BVH implementation is largely derived from Peter
         // Shirley's, it does *not* use the random axis selection and sort
         // routine, because it tended to fall into pathological cases.
 
-        fn axis_range(objs: &[Box<Object>], exposure: Range<f32>, axis: Axis) -> f32 {
+        fn axis_range(objs: &[Box<dyn Object>], exposure: Range<f32>, axis: Axis) -> f32 {
             let range = objs.iter().fold(std::f32::MAX..std::f32::MIN, |range, o| {
                 let bb = o.bounding_box(exposure.clone());
                 let min = bb.min[axis].min(bb.max[axis]);
@@ -83,7 +82,12 @@ impl Bvh {
 }
 
 impl Object for Bvh {
-    fn hit<'o>(&'o self, ray: &Ray, mut t_range: Range<f32>, rng: &mut dyn FnMut() -> f32) -> Option<HitRecord<'o>> {
+    fn hit<'o>(
+        &'o self,
+        ray: &Ray,
+        mut t_range: Range<f32>,
+        rng: &mut dyn FnMut() -> f32,
+    ) -> Option<HitRecord<'o>> {
         if self.bounding_box.hit(ray, t_range.clone()) {
             match &self.contents {
                 BvhContents::Node { left, right } => {
@@ -115,7 +119,7 @@ impl Object for Bvh {
         }
     }
 
-    fn bounding_box(&self, _exposure: std::ops::Range<f32>) -> Aabb {
+    fn bounding_box(&self, _exposure: Range<f32>) -> Aabb {
         self.bounding_box
     }
 }

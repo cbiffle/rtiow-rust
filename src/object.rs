@@ -36,7 +36,7 @@ pub trait Object: std::fmt::Debug + Sync + Send {
     /// Computes the bounding box for the object at the given range of times.
     /// This is called during scene setup, not rendering, and so it may be
     /// expensive.
-    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb;
+    fn bounding_box(&self, exposure: Range<f32>) -> Aabb;
 }
 
 impl Object for Box<dyn Object> {
@@ -48,7 +48,7 @@ impl Object for Box<dyn Object> {
     ) -> Option<HitRecord<'o>> {
         (**self).hit(ray, t_range, rng)
     }
-    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+    fn bounding_box(&self, exposure: Range<f32>) -> Aabb {
         (**self).bounding_box(exposure)
     }
 }
@@ -110,7 +110,7 @@ impl Object for Sphere {
         None
     }
 
-    fn bounding_box(&self, _exposure: std::ops::Range<f32>) -> Aabb {
+    fn bounding_box(&self, _exposure: Range<f32>) -> Aabb {
         Aabb {
             min: -Vec3::from(self.radius),
             max: Vec3::from(self.radius),
@@ -155,9 +155,9 @@ pub trait StaticAxis: std::fmt::Debug + Send + Sync {
 pub struct StaticX;
 
 impl StaticAxis for StaticX {
-    const AXIS: Axis = Axis::X;
-    const OTHER1: Axis = Axis::Y;
-    const OTHER2: Axis = Axis::Z;
+    const AXIS: Axis = X;
+    const OTHER1: Axis = Y;
+    const OTHER2: Axis = Z;
 }
 
 /// Compile-time (static) name for the Y axis.
@@ -165,9 +165,9 @@ impl StaticAxis for StaticX {
 pub struct StaticY;
 
 impl StaticAxis for StaticY {
-    const AXIS: Axis = Axis::Y;
-    const OTHER1: Axis = Axis::X;
-    const OTHER2: Axis = Axis::Z;
+    const AXIS: Axis = Y;
+    const OTHER1: Axis = X;
+    const OTHER2: Axis = Z;
 }
 
 /// Compile-time (static) name for the Z axis.
@@ -175,9 +175,9 @@ impl StaticAxis for StaticY {
 pub struct StaticZ;
 
 impl StaticAxis for StaticZ {
-    const AXIS: Axis = Axis::Z;
-    const OTHER1: Axis = Axis::X;
-    const OTHER2: Axis = Axis::Y;
+    const AXIS: Axis = Z;
+    const OTHER1: Axis = X;
+    const OTHER2: Axis = Y;
 }
 
 impl<A: StaticAxis> Object for Rect<A> {
@@ -217,7 +217,7 @@ impl<A: StaticAxis> Object for Rect<A> {
         })
     }
 
-    fn bounding_box(&self, _exposure: std::ops::Range<f32>) -> Aabb {
+    fn bounding_box(&self, _exposure: Range<f32>) -> Aabb {
         let mut min = Vec3::default();
         let mut max = Vec3::default();
 
@@ -252,7 +252,7 @@ impl<O: Object> Object for FlipNormals<O> {
         })
     }
 
-    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+    fn bounding_box(&self, exposure: Range<f32>) -> Aabb {
         self.0.bounding_box(exposure)
     }
 }
@@ -282,7 +282,7 @@ impl<T: Object> Object for Translate<T> {
         })
     }
 
-    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+    fn bounding_box(&self, exposure: Range<f32>) -> Aabb {
         let b = self.object.bounding_box(exposure);
         Aabb {
             min: b.min + self.offset,
@@ -333,7 +333,7 @@ impl<T: Object> Object for RotateY<T> {
             })
     }
 
-    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+    fn bounding_box(&self, exposure: Range<f32>) -> Aabb {
         fn rot(p: Vec3, sin_theta: f32, cos_theta: f32) -> Vec3 {
             Vec3(
                 p.dot(Vec3(cos_theta, 0., sin_theta)),
@@ -373,7 +373,7 @@ impl<T: Object, S: Object> Object for And<T, S> {
         hit1.or(hit0)
     }
 
-    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+    fn bounding_box(&self, exposure: Range<f32>) -> Aabb {
         self.0
             .bounding_box(exposure.clone())
             .merge(self.1.bounding_box(exposure))
@@ -475,7 +475,7 @@ impl<O: Object> Object for LinearMove<O> {
         )
     }
 
-    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+    fn bounding_box(&self, exposure: Range<f32>) -> Aabb {
         let bb = self.object.bounding_box(exposure.clone());
 
         let bb_start = Aabb {
@@ -538,7 +538,7 @@ impl<O: Object> Object for ConstantMedium<O> {
         None
     }
 
-    fn bounding_box(&self, exposure: std::ops::Range<f32>) -> Aabb {
+    fn bounding_box(&self, exposure: Range<f32>) -> Aabb {
         self.boundary.bounding_box(exposure)
     }
 }

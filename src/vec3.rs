@@ -196,7 +196,7 @@ impl std::iter::Sum for Vec3 {
 ///
 /// The resulting vector has each component in the half-open range `[0,1)`. Note
 /// that this is *not* a unit vector.
-impl rand::distributions::Distribution<Vec3> for rand::distributions::Standard {
+impl Distribution<Vec3> for rand::distributions::Standard {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Vec3 {
         Vec3(rng.gen(), rng.gen(), rng.gen())

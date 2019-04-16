@@ -294,22 +294,21 @@ fn book_final_scene(
         let white = Material::Lambertian {
             albedo: texture::constant(Vec3::from(0.73)),
         };
-        let spheres = (0..SPHERES).map(|_| {
-            Box::new(object::Translate {
-                offset: 165. * rng.gen::<Vec3>(),
-                object: object::Sphere {
-                    radius: 10.,
-                    material: white.clone(),
-                },
-            }) as Box<dyn Object>
-        }).collect();
+        let spheres = (0..SPHERES)
+            .map(|_| {
+                Box::new(object::Translate {
+                    offset: 165. * rng.gen::<Vec3>(),
+                    object: object::Sphere {
+                        radius: 10.,
+                        material: white.clone(),
+                    },
+                }) as Box<dyn Object>
+            })
+            .collect();
         let bvh = rtiow::bvh::from_scene(spheres, exposure.clone());
         object::Translate {
             offset: Vec3(-100., 270., 395.),
-            object: object::rotate_y(
-                15.,
-                bvh,
-            ),
+            object: object::rotate_y(15., bvh),
         }
     }));
 

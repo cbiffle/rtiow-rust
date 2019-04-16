@@ -1,4 +1,5 @@
-#![deny(unsafe_code)]
+#![forbid(unsafe_code)]
+#![deny(unsafe_code, bare_trait_objects, unused_qualifications)]
 
 mod aabb;
 pub mod bvh;
@@ -70,7 +71,6 @@ pub fn color(world: &impl World, mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
     // 2. The ray reaches a surface that does not scatter.
     // 3. The ray bounces more than 50 times.
     while let Some(hit) = world.hit_top(&ray, rng) {
-
         // Record this hit's contribution, attenuated by the total attenuation
         // so far.
         accum = accum + strength * hit.material.emitted(hit.p);
@@ -87,10 +87,12 @@ pub fn color(world: &impl World, mut ray: Ray, rng: &mut impl Rng) -> Vec3 {
             strength = strength * attenuation;
         } else {
             // Locally absorbed; we're done.
-            return accum
+            return accum;
         }
 
-        if bounces == 50 { return accum }
+        if bounces == 50 {
+            return accum;
+        }
 
         bounces += 1;
     }
@@ -173,24 +175,20 @@ pub fn cornell_box_with_boxes() -> Vec<Box<dyn Object>> {
     let mut scene = cornell_box();
     let white = diffuse_color(Vec3::from(0.73));
 
-    scene.push(
-        Box::new(object::Translate {
-            offset: Vec3(130., 0., 65.),
-            object: object::rotate_y(
-                -18.,
-                object::rect_prism(Vec3(0., 0., 0.), Vec3(165., 165., 165.), white.clone()),
-            ),
-        })
-    );
-    scene.push(
-        Box::new(object::Translate {
-            offset: Vec3(265., 0., 295.),
-            object: object::rotate_y(
-                15.,
-                object::rect_prism(Vec3(0., 0., 0.), Vec3(165., 330., 165.), white),
-            ),
-        })
-    );
+    scene.push(Box::new(object::Translate {
+        offset: Vec3(130., 0., 65.),
+        object: object::rotate_y(
+            -18.,
+            object::rect_prism(Vec3(0., 0., 0.), Vec3(165., 165., 165.), white.clone()),
+        ),
+    }));
+    scene.push(Box::new(object::Translate {
+        offset: Vec3(265., 0., 295.),
+        object: object::rotate_y(
+            15.,
+            object::rect_prism(Vec3(0., 0., 0.), Vec3(165., 330., 165.), white),
+        ),
+    }));
     scene
 }
 
@@ -366,7 +364,7 @@ pub fn par_cast(nx: usize, ny: usize, ns: usize, camera: &Camera, world: impl Wo
     Image::par_compute(nx, ny, |x, y| {
         let col: Vec3 = (0..ns)
             .map(|_| {
-                let mut rng = rand::thread_rng();
+                let mut rng = thread_rng();
                 let u = (x as f32 + rng.gen::<f32>()) / nx as f32;
                 let v = (y as f32 + rng.gen::<f32>()) / ny as f32;
                 let r = camera.get_ray(u, v, &mut rng);
