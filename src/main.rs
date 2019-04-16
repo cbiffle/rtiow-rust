@@ -190,14 +190,18 @@ fn book_final_scene(
     let mut world: Vec<Box<dyn Object>> = vec![];
 
     // Make random floor.
-    for i in 0..20 {
-        for j in 0..20 {
-            const W: f32 = 100.;
-            let c0 = Vec3(-1000. + i as f32 * W, 0., -1000. + j as f32 * W);
-            let c1 = c0 + Vec3(W, 100. * (rng.gen::<f32>() + 0.01), W);
-            world.push(Box::new(object::rect_prism(c0, c1, ground.clone())));
+    world.push({
+        let mut boxes: Vec<Box<dyn Object>> = vec![];
+        for i in 0..20 {
+            for j in 0..20 {
+                const W: f32 = 100.;
+                let c0 = Vec3(-1000. + i as f32 * W, 0., -1000. + j as f32 * W);
+                let c1 = c0 + Vec3(W, 100. * (rng.gen::<f32>() + 0.01), W);
+                boxes.push(Box::new(object::rect_prism(c0, c1, ground.clone())));
+            }
         }
-    }
+        Box::new(bvh::from_scene(boxes, exposure.clone()))
+    });
 
     // Make light.
     world.push(Box::new(object::Rect {
@@ -315,7 +319,7 @@ fn book_final_scene(
     (world, camera, exposure)
 }
 
-const USE_BVH: bool = true;
+const USE_BVH: bool = false;
 
 fn main() {
     const NX: usize = 300;
