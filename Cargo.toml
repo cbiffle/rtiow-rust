@@ -2,7 +2,7 @@
 name = "rtiow"
 version = "0.1.0"
 authors = ["cbiffle <cbiffle@x.team>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 lazy_static = "1.3"

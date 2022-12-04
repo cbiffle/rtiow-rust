@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![deny(unsafe_code, bare_trait_objects, unused_qualifications)]
+#![deny(bare_trait_objects, unused_qualifications)]
 
 mod aabb;
 pub mod bvh;

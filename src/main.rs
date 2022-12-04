@@ -181,7 +181,6 @@ fn book_final_scene(
     );
 
     use rtiow::material::Material;
-    use rtiow::texture;
 
     let ground = Material::Lambertian {
         albedo: texture::constant(Vec3(0.48, 0.83, 0.53)),
